@@ -55,7 +55,11 @@ namespace IzudisbotBSP
                         "Open the izudisbot Discord bridge settings",
                         OpenSettings);
                 }
-                MenuButtons.Instance.RegisterButton(_button);
+#if BSML_LEGACY
+                MenuButtons.instance.RegisterButton(_button);   // BSML 1.6.x (PersistentSingleton)
+#else
+                MenuButtons.Instance.RegisterButton(_button);   // BSML 1.12.x (ZenjectSingleton)
+#endif
                 _log?.Info("In-game menu button registered.");
                 return true;
             }
@@ -89,7 +93,15 @@ namespace IzudisbotBSP
 
         public static void Unregister(IPALogger log)
         {
-            try { if (_button != null) MenuButtons.Instance.UnregisterButton(_button); }
+            try
+            {
+                if (_button != null)
+#if BSML_LEGACY
+                    MenuButtons.instance.UnregisterButton(_button);
+#else
+                    MenuButtons.Instance.UnregisterButton(_button);
+#endif
+            }
             catch (Exception err) { log?.Warn("Menu button unregister 실패: " + err.Message); }
 
             try { if (_helperGo != null) UnityEngine.Object.Destroy(_helperGo); }

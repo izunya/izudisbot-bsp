@@ -1,12 +1,8 @@
 <bg xmlns='https://monkeymanboy.github.io/BSML-Docs/'>
-  <vertical pref-width='110' pref-height='75' horizontal-fit='PreferredSize' vertical-fit='PreferredSize'>
-    <tab-selector tab-tag='izudisbot-tabs' />
-    <tab tags='izudisbot-tabs' tab-name='Web'>
-      <vertical spacing='3' pad='4' horizontal-fit='PreferredSize'>
-        <text text='izudisbot Discord Bridge' align='Center' font-size='6' />
-        <text text='Open the web settings UI in your browser.' align='Center' font-size='3.5' />
-        <button text='Web Open' on-click='web-open' />
-      </vertical>
-    </tab>
+  <!-- 탭이 1개라 tab-selector 는 생략(큰 'WEB' 라벨 방지). 기능이 늘면 tab-selector + tab 으로 감싸면 됨. -->
+  <vertical pad='6' spacing='3' horizontal-fit='PreferredSize' vertical-fit='PreferredSize'>
+    <text text='izudisbot Discord Bridge' align='Center' font-size='6' />
+    <text text='Open the web settings UI in your browser.' align='Center' font-size='3.5' />
+    <button text='Web Open' on-click='web-open' />
   </vertical>
 </bg>
