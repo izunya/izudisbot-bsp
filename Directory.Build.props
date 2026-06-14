@@ -1,0 +1,10 @@
+<Project>
+    <!--
+        Beat Saber 설치 경로 — Rider/dotnet build 시 이 변수로 참조 DLL 해석.
+        BSManager 인스턴스 경로로 기본값 지정.
+        다른 경로 쓰려면 시스템 환경변수 BeatSaberDir 설정.
+    -->
+    <PropertyGroup>
+        <BeatSaberDir Condition="'$(BeatSaberDir)' == ''">C:\Users\izuna\BSManager\BSInstances\1.40.8</BeatSaberDir>
+    </PropertyGroup>
+</Project>

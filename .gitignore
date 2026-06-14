@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.idea/
+.vs/
+*.user
+
+# CI refs (절대 커밋 금지 - 게임 DLL)
+_refs/
+refs.zip
+bs-refs.b64.txt
+package/
+
+# 빌드 결과 zip (Releases 로만 배포)
+izudisbot-bsp-*.zip
