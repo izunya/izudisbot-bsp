@@ -1,5 +1,7 @@
 using System;
+using System.Reflection;
 using BeatSaberMarkupLanguage.FloatingScreen;
+using CP_SDK.UI.Components;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,17 +9,26 @@ using UnityEngine.UI;
 namespace IzudisbotBSP
 {
     /// <summary>
-    /// 디스코드 음성채널 인원수를 표시하는 별도 floating UI.
-    /// BSP_Chat 의 기존 사람 아이콘 + 시청자 수 표시는 그대로 두고,
-    /// 그 옆/위에 디스코드 색 점 + 숫자 형태로 추가 표시.
+    /// 디스코드 음성채널 인원수를 표시하는 floating UI.
     ///
-    /// BSML 의 FloatingScreen 으로 만들어 게임 메뉴 / 게임플레이 모두에서 노출되며,
-    /// DontDestroyOnLoad 로 씬 전환 시에도 유지. VR 컨트롤러로 잡고 위치 이동 가능.
+    /// 동작:
+    ///   0.3.0 의 독립 FloatingScreen(렌더링 검증됨)을 그대로 쓰되, 매 프레임 BSP_Chat
+    ///   모듈의 패널 위치를 따라가게(follow) 한다. 우선순위:
+    ///     1) 시청자 수(Status) 패널(<c>m_StatusFloatingPanel</c>)이 보이면 → 그 패널 "바로 위"
+    ///        ("Show viewer count" 옵션이 켜져 오른쪽에 인원수 표시가 떠 있을 때)
+    ///     2) Status 패널이 없으면(옵션 꺼짐) → 채팅 패널(<c>m_ChatFloatingPanel</c>)의 "오른쪽 아래"
+    ///     3) 둘 다 없으면 → 기본 위치(ScreenPos)
+    ///   패널은 모두 <see cref="CFloatingPanel"/> 타입이고, 런타임 리플렉션으로 찾는다.
+    ///   → 채팅창을 VR 컨트롤러로 옮기면 음성 인원수도 같이 따라 움직인다.
+    ///
+    ///   ※ 패널 캔버스에 자식으로 직접 넣지 않는 이유: 그 캔버스의 커브드 머티리얼/클리핑
+    ///   때문에 일반 TMP 가 안 보이게 렌더된다. 그래서 별도 FloatingScreen 을 월드 공간에서
+    ///   패널 위로 좌표만 맞춘다.
     ///
     /// ⚠ 스레드 주의: Push() 는 WebSocket 수신 스레드에서 호출되므로 Unity 객체를
     /// 직접 만들면 "can only be called from the main thread" 예외가 난다.
-    /// 따라서 Push() 는 값만 저장하고, 실제 FloatingScreen 생성/텍스트 갱신은
-    /// Unity 메인 스레드의 Update() 에서 수행한다.
+    /// 따라서 Push() 는 값만 저장하고, 실제 UI 생성/갱신/추적은 Unity 메인 스레드의
+    /// Update() 에서 수행한다.
     /// </summary>
     public class VoiceIndicator : MonoBehaviour
     {
@@ -32,11 +43,28 @@ namespace IzudisbotBSP
         private static string _pendingChannel;
         private static bool _dirty;
 
-        // 위치/크기 — 사용자가 원하는 정확한 anchor 는 게임에서 잡고 조정 필요.
-        // 1차 디폴트: 정면 약간 왼쪽 위 (Chat 화면이 보통 정면 왼쪽이라 그 위쪽).
+        // 메인 스레드에서 마지막으로 소비한 값
+        private int _count;
+        private string _channel;
+        private bool _hasValue;
+
+        // 따라가기 상태
+        private bool _wasFollowing;            // 직전 프레임에 패널을 따라가고 있었는지
+        private bool _placedDefault;           // 기본 위치에 한 번이라도 놓았는지
+
+        // 패널과 우리 화면 사이 추가 여백(월드 단위).
+        private const float FollowWorldGap = 0.02f;
+
+        // ---- FloatingScreen 위치/크기 (패널을 전혀 못 찾을 때의 기본값, 0.3.0 동작 유지) ----
         private static readonly Vector2 ScreenSize = new Vector2(22f, 12f);
         private static readonly Vector3 ScreenPos = new Vector3(-2.4f, 3.2f, 2.0f);
         private static readonly Quaternion ScreenRot = Quaternion.Euler(0, -30, 0);
+
+        // ---- 캐시된 리플렉션 (BSP_Chat 는 우리 뒤에 로드되므로 늦게 해석될 수 있음) ----
+        private static Type _chatType;
+        private static PropertyInfo _instanceProp;
+        private static FieldInfo _statusPanelField;
+        private static FieldInfo _chatPanelField;
 
         /// <summary>메인 스레드(Plugin.OnEnable)에서 호출 — 영속 GameObject 생성.</summary>
         public static void Init()
@@ -78,25 +106,183 @@ namespace IzudisbotBSP
 
         private void Update()
         {
-            int count;
-            string channel;
             lock (StateLock)
             {
-                if (!_dirty) return;
-                _dirty = false;
-                count = _pendingCount;
-                channel = _pendingChannel;
+                if (_dirty)
+                {
+                    _dirty = false;
+                    _count = _pendingCount;
+                    _channel = _pendingChannel;
+                    _hasValue = true;
+                }
             }
 
             EnsureCreated();
-            if (_text == null) return;
+            if (_screen == null) return;
 
-            // Discord blurple #5865F2 색 점 + 숫자
-            if (count > 0 && !string.IsNullOrEmpty(channel))
-                _text.text = "<color=#5865F2>●</color> " + count;
-            else
-                _text.text = "<color=#5865F2>●</color> <color=#888>—</color>";
+            // 우선순위에 따라 따라갈 패널 선택
+            CFloatingPanel target = null;
+            bool bottomRight = false;
+            try
+            {
+                if (EnsureReflection())
+                {
+                    var inst = _instanceProp.GetValue(null, null);
+                    if (inst != null)
+                    {
+                        var status = AsUsable(_statusPanelField.GetValue(inst) as CFloatingPanel);
+                        if (status != null)
+                        {
+                            target = status;            // 시청자 수 패널 위
+                        }
+                        else
+                        {
+                            var chat = AsUsable(_chatPanelField.GetValue(inst) as CFloatingPanel);
+                            if (chat != null)
+                            {
+                                target = chat;          // 옵션 꺼짐 → 채팅 패널 오른쪽 아래
+                                bottomRight = true;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception err)
+            {
+                Plugin.Log?.Warn("VoiceIndicator: 패널 조회 실패: " + err.Message);
+                target = null;
+            }
+
+            if (target != null)
+            {
+                if (bottomRight) PositionBottomRight(target);
+                else PositionAboveTop(target);
+                _placedDefault = false;
+            }
+            else if (_wasFollowing || !_placedDefault)
+            {
+                // 패널을 잃었거나 최초 → 기본 위치로 한 번 놓는다.
+                _screen.transform.position = ScreenPos;
+                _screen.transform.rotation = ScreenRot;
+                _placedDefault = true;
+            }
+            _wasFollowing = target != null;
+
+            if (_text != null) _text.text = FormatText();
         }
+
+        private string FormatText()
+        {
+            // Discord blurple #5865F2 색 점 + 숫자
+            if (_hasValue && _count > 0 && !string.IsNullOrEmpty(_channel))
+                return "<color=#5865F2>●</color> " + _count;
+            return "<color=#5865F2>●</color> <color=#888>—</color>";
+        }
+
+        /// <summary>패널이 존재하고 화면에 활성화돼 있으면 그대로 반환, 아니면 null.</summary>
+        private static CFloatingPanel AsUsable(CFloatingPanel panel)
+        {
+            if (panel == null) return null;   // Unity-null(파괴됨) 포함
+            try
+            {
+                var go = panel.gameObject;
+                if (go == null || !go.activeInHierarchy) return null;   // 옵션 꺼짐 → 숨김
+            }
+            catch { return null; }
+            return panel;
+        }
+
+        /// <summary>패널의 상단 중앙 바로 위로 우리 FloatingScreen 의 위치/회전을 맞춘다.</summary>
+        private void PositionAboveTop(CFloatingPanel panel)
+        {
+            var rt = panel.RTransform;
+            if (rt == null) return;
+
+            // 패널의 월드 4코너 (0=좌하,1=좌상,2=우상,3=우하) — pivot/scale/rotation 모두 반영.
+            var corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+            Vector3 topCenter = (corners[1] + corners[2]) * 0.5f;
+            Vector3 up = corners[1] - corners[0];
+            Vector3 upN = up.sqrMagnitude > 1e-8f ? up.normalized : rt.up;
+
+            float ourHalfHeight = ScreenSize.y * 0.5f * Mathf.Abs(_screen.transform.lossyScale.y);
+
+            _screen.transform.position = topCenter + upN * (ourHalfHeight + FollowWorldGap);
+            _screen.transform.rotation = rt.rotation;
+        }
+
+        /// <summary>패널의 오른쪽 아래(우하단)로 우리 FloatingScreen 의 위치/회전을 맞춘다.</summary>
+        private void PositionBottomRight(CFloatingPanel panel)
+        {
+            var rt = panel.RTransform;
+            if (rt == null) return;
+
+            var corners = new Vector3[4];
+            rt.GetWorldCorners(corners);
+            Vector3 bottomLeft = corners[0];
+            Vector3 topLeft = corners[1];
+            Vector3 bottomRight = corners[3];
+
+            Vector3 right = bottomRight - bottomLeft;
+            Vector3 rightN = right.sqrMagnitude > 1e-8f ? right.normalized : rt.right;
+            Vector3 up = topLeft - bottomLeft;
+            Vector3 upN = up.sqrMagnitude > 1e-8f ? up.normalized : rt.up;
+
+            float ourHalfW = ScreenSize.x * 0.5f * Mathf.Abs(_screen.transform.lossyScale.x);
+            float ourHalfH = ScreenSize.y * 0.5f * Mathf.Abs(_screen.transform.lossyScale.y);
+
+            // 오른쪽 가장자리를 패널 오른쪽에 맞추고, 바닥 아래로 살짝 내려 띄운다.
+            _screen.transform.position =
+                bottomRight - rightN * ourHalfW - upN * (ourHalfH + FollowWorldGap);
+            _screen.transform.rotation = rt.rotation;
+        }
+
+        // ================================================================
+        // BSP_Chat 패널 조회 (리플렉션)
+        // ================================================================
+
+        /// <summary>ChatPlexMod_Chat.Chat 타입/멤버를 한 번 해석해 캐시. 아직 로드 전이면 false (다음에 재시도).</summary>
+        private static bool EnsureReflection()
+        {
+            if (_instanceProp != null && _statusPanelField != null && _chatPanelField != null)
+                return true;
+
+            var t = FindType("ChatPlexMod_Chat.Chat");
+            if (t == null) return false;   // BSP_Chat 아직 미로딩 → 다음 주기에 재시도
+            _chatType = t;
+
+            // Instance 는 베이스 CP_SDK.ModuleBase<Chat> 에 선언된 public static 프로퍼티
+            for (var b = t; b != null && _instanceProp == null; b = b.BaseType)
+            {
+                _instanceProp = b.GetProperty("Instance",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            }
+
+            const BindingFlags ff = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            // 오른쪽 "시청자/인원수" 표시 = Status 패널, 옵션 꺼지면 채팅 패널로 폴백.
+            _statusPanelField = t.GetField("m_StatusFloatingPanel", ff);
+            _chatPanelField = t.GetField("m_ChatFloatingPanel", ff);
+
+            return _instanceProp != null && _statusPanelField != null && _chatPanelField != null;
+        }
+
+        private static Type FindType(string fullName)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    var t = asm.GetType(fullName, false);
+                    if (t != null) return t;
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        // ================================================================
+        // FloatingScreen 생성
+        // ================================================================
 
         private void EnsureCreated()
         {
@@ -116,7 +302,7 @@ namespace IzudisbotBSP
                 _text.fontSize = 6.5f;
                 _text.alignment = TextAlignmentOptions.Center;
                 _text.richText = true;
-                _text.text = "<color=#5865F2>●</color> <color=#888>—</color>";
+                _text.text = FormatText();
                 var rt = _text.rectTransform;
                 rt.anchorMin = Vector2.zero;
                 rt.anchorMax = Vector2.one;
