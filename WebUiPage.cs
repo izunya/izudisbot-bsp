@@ -102,7 +102,10 @@ namespace IzudisbotBSP
 <script>
 const $=id=>document.getElementById(id);
 let inited=false;
+const LANGS=['en','ko','ja'];
+const LANGNAME={en:'English',ko:'한국어',ja:'日本語'};
 let lang=localStorage.getItem('lang')||'en';
+if(LANGS.indexOf(lang)<0)lang='en';
 
 const S={
  en:{
@@ -126,6 +129,17 @@ const S={
   'status.last':'마지막 수신','btn.reconnect':'지금 재접속','time.now':'방금','time.sec':'초 전','time.min':'분 전','time.hour':'시간 전',
   'ch.toggle':'게임 전달 on/off','ch.none':'아직 수신된 채널이 없습니다','log.sub':'(신규순 · 필터된 메시지는 흐리게)',
   'btn.clear':'지우기','log.filtered':'(필터됨)','log.none':'로그 없음'
+ },
+ ja:{
+  'conn.connected':'接続済み','conn.disconnected':'切断','conn.noresp':'応答なし',
+  'card.connection':'接続設定','card.status':'ステータス','card.channels':'チャンネル','card.log':'メッセージログ',
+  'label.url':'WebSocket URL','label.token':'トークン','btn.show':'表示',
+  'label.auto':'自動再接続','label.cmdonly':'コマンド(!)のみ転送','label.launch':'起動時にWebを開く',
+  'label.interval':'再接続間隔(秒)','btn.save':'保存して再接続','msg.saved':'保存しました ✓',
+  'status.ws':'WebSocket','status.token':'トークン','status.tokenSet':'設定済み','status.tokenNone':'未設定',
+  'status.last':'最終受信','btn.reconnect':'今すぐ再接続','time.now':'たった今','time.sec':'秒前','time.min':'分前','time.hour':'時間前',
+  'ch.toggle':'転送 on/off','ch.none':'受信したチャンネルがありません','log.sub':'(新しい順・フィルタ済みは薄く)',
+  'btn.clear':'クリア','log.filtered':'(フィルタ済み)','log.none':'ログなし'
  }
 };
 function t(k){return (S[lang]&&S[lang][k])||S.en[k]||k;}
@@ -137,10 +151,11 @@ function toggleTok(){const x=$('token');x.type=x.type==='password'?'text':'passw
 function applyI18n(){
  document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.dataset.i18n);});
  document.documentElement.lang=lang;
- $('langbtn').textContent= lang==='en'?'한국어':'English';
+ const next=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];
+ $('langbtn').textContent=LANGNAME[next];
  poll();
 }
-function toggleLang(){lang=lang==='en'?'ko':'en';localStorage.setItem('lang',lang);applyI18n();}
+function toggleLang(){lang=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];localStorage.setItem('lang',lang);applyI18n();}
 
 async function poll(){
  try{
