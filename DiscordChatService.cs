@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using CP_SDK.Chat;
 using CP_SDK.Chat.Interfaces;
 using CP_SDK.Chat.Services;
 using IPALogger = IPA.Logging.Logger;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using WebSocketSharp;
@@ -50,6 +52,20 @@ namespace IzudisbotBSP
         private readonly Dictionary<string, ChannelStat> _channelStats = new Dictionary<string, ChannelStat>();
         private DateTime? _lastMessageUtc;
         private const int MaxLog = 200;
+
+        // ---- !bsr → 디스코드 알림 추적 ----
+        private static readonly Regex BsrRegex = new Regex(@"^!bsr\s+([0-9a-fA-F]{1,8})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private readonly object _pendingLock = new object();
+        private readonly Dictionary<string, PendingBsr> _pendingBsr = new Dictionary<string, PendingBsr>(StringComparer.OrdinalIgnoreCase);
+        private Timer _pendingGcTimer;
+
+        private class PendingBsr
+        {
+            public string Code;
+            public string ChannelId;
+            public string UserName;
+            public DateTime ExpiresUtc;
+        }
 
         public DiscordChatService(Config config, IPALogger log)
         {
@@ -248,7 +264,9 @@ namespace IzudisbotBSP
 
         public void SendTextMessage(IChatChannel channel, string message)
         {
-            // 봇 측에서 인바운드 send 처리 추가되면 여기서 _ws.Send(...) 호출.
+            // BSP_ChatRequest 등 다른 모듈이 응답을 우리 service 의 채널로 보내면 여기로 들어옴.
+            // 직전 !bsr 명령에 대한 응답인지 매칭 → 봇에 bsr_request 이벤트 전달.
+            TryMatchBsrResponse(message);
         }
 
         // ================================================================
@@ -350,6 +368,14 @@ namespace IzudisbotBSP
                 }
 
                 if (type == "pong") return;
+                if (type == "voice_count")
+                {
+                    var count = obj["count"]?.ToObject<int?>() ?? 0;
+                    var vc = obj["voiceChannel"] as JObject;
+                    var vcName = vc?["name"]?.ToString();
+                    ApplyVoiceCount(count, vcName);
+                    return;
+                }
                 if (type != "message") return;
 
                 var channelObj = obj["channel"] as JObject;
@@ -378,6 +404,13 @@ namespace IzudisbotBSP
                 RecordIncoming(chId, channel.Name, user.UserName, content, forward);
 
                 if (!forward) return;
+
+                // !bsr 명령 — BSP_ChatRequest 응답을 추적하기 위해 pending 등록
+                var bsrMatch = BsrRegex.Match(content);
+                if (bsrMatch.Success)
+                {
+                    TrackPendingBsr(user.UserName, bsrMatch.Groups[1].Value, chId);
+                }
 
                 var emotes = ParseEmotes(obj["emotes"] as JArray);
                 var message = new DiscordChatMessage(
@@ -450,6 +483,156 @@ namespace IzudisbotBSP
                 m_OnLiveStatusUpdatedCallbacks?.InvokeAll((IChatService)this, (IChatChannel)ch, true, 0);
                 return ch;
             }
+        }
+
+        // ================================================================
+        // !bsr 신청 추적 — 신청 직후 BSP_ChatRequest 응답을 매칭해 봇에
+        // bsr_request (queued / rejected / queue_closed) 이벤트를 보낸다.
+        // 응답이 6초 안에 안 오면 queue_closed 로 간주 (모듈 비활성 / 큐 닫힘).
+        // ================================================================
+
+        private void TrackPendingBsr(string userName, string code, string channelId)
+        {
+            if (string.IsNullOrEmpty(userName)) return;
+            lock (_pendingLock)
+            {
+                _pendingBsr[userName] = new PendingBsr
+                {
+                    Code = code,
+                    ChannelId = channelId,
+                    UserName = userName,
+                    ExpiresUtc = DateTime.UtcNow.AddSeconds(6),
+                };
+                EnsurePendingGcTimer();
+            }
+        }
+
+        private void EnsurePendingGcTimer()
+        {
+            if (_pendingGcTimer != null) return;
+            _pendingGcTimer = new Timer(_ => GcPending(), null, 2000, Timeout.Infinite);
+        }
+
+        private void GcPending()
+        {
+            var now = DateTime.UtcNow;
+            List<PendingBsr> expired = null;
+            bool hasRemaining;
+            lock (_pendingLock)
+            {
+                foreach (var key in _pendingBsr.Keys.ToList())
+                {
+                    var p = _pendingBsr[key];
+                    if (p.ExpiresUtc <= now)
+                    {
+                        (expired ?? (expired = new List<PendingBsr>())).Add(p);
+                        _pendingBsr.Remove(key);
+                    }
+                }
+                hasRemaining = _pendingBsr.Count > 0;
+                _pendingGcTimer?.Dispose();
+                _pendingGcTimer = null;
+                if (hasRemaining) EnsurePendingGcTimer();
+            }
+            if (expired == null) return;
+            foreach (var p in expired)
+            {
+                SendBsrEvent(p, "queue_closed", null, null);
+            }
+        }
+
+        private void TryMatchBsrResponse(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            PendingBsr matched = null;
+            lock (_pendingLock)
+            {
+                foreach (var kv in _pendingBsr)
+                {
+                    var name = kv.Value.UserName;
+                    if (!string.IsNullOrEmpty(name) && message.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matched = kv.Value;
+                        _pendingBsr.Remove(kv.Key);
+                        break;
+                    }
+                }
+            }
+            if (matched == null) return;
+
+            string status;
+            string reason = null;
+            string songName = null;
+            if (IsClosedResponse(message))
+            {
+                status = "queue_closed";
+            }
+            else if (IsQueuedResponse(message))
+            {
+                status = "queued";
+                songName = ExtractSongInfo(message);
+            }
+            else
+            {
+                status = "rejected";
+                reason = message.Length > 256 ? message.Substring(0, 256) : message;
+            }
+            SendBsrEvent(matched, status, reason, songName);
+        }
+
+        private static bool IsQueuedResponse(string msg)
+        {
+            return msg.IndexOf("added to queue", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsClosedResponse(string msg)
+        {
+            return msg.IndexOf("queue is closed", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("queue is currently closed", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("ChatRequest is disabled", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("requests are not", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static string ExtractSongInfo(string msg)
+        {
+            // 응답 형식 예: "@user (key) Song Name by Mapper - Diff (key) was added to queue!"
+            var idx = msg.IndexOf("was added to queue", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return null;
+            var prefix = msg.Substring(0, idx).Trim();
+            var firstClose = prefix.IndexOf(')');
+            var lastOpen = prefix.LastIndexOf('(');
+            if (firstClose < 0 || lastOpen < 0 || lastOpen <= firstClose + 1) return null;
+            return prefix.Substring(firstClose + 1, lastOpen - firstClose - 1).Trim();
+        }
+
+        private void SendBsrEvent(PendingBsr p, string status, string reason, string songName)
+        {
+            if (_ws == null || !_connected) return;
+            var obj = new JObject
+            {
+                ["type"] = "bsr_request",
+                ["code"] = p.Code,
+                ["status"] = status,
+                ["channelId"] = p.ChannelId,
+                ["requestedBy"] = new JObject { ["name"] = p.UserName },
+            };
+            if (!string.IsNullOrEmpty(songName)) obj["songName"] = songName;
+            if (!string.IsNullOrEmpty(reason)) obj["reason"] = reason;
+            try { _ws.Send(obj.ToString(Formatting.None)); }
+            catch (Exception err) { _log?.Warn("bsr_request send 실패: " + err.Message); }
+        }
+
+        // ================================================================
+        // 음성채널 인원수 — 봇이 voice_count 페이로드를 보낼 때마다
+        // VoiceIndicator (별도 floating UI) 로 전달.
+        // BSP_Chat 의 기존 사람 아이콘 + 시청자 수 표시는 건드리지 않음.
+        // ================================================================
+
+        private void ApplyVoiceCount(int count, string voiceChannelName)
+        {
+            // Push 는 값만 저장 → 실제 UI 갱신은 VoiceIndicator.Update (Unity 메인 스레드).
+            try { VoiceIndicator.Push(count, voiceChannelName); }
+            catch (Exception err) { _log?.Warn("VoiceIndicator update 실패: " + err.Message); }
         }
     }
 }

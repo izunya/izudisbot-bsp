@@ -35,6 +35,9 @@ namespace IzudisbotBSP
             _service.Start();
             Log.Info("DiscordChatService registered → " + (Config.Current.Url ?? "(unconfigured)"));
 
+            // 음성채널 인원수 floating UI — 메인 스레드에서 GameObject 생성해야 함.
+            VoiceIndicator.Init();
+
             _webServer = new WebServer(_service, Config.Current, Log);
             _webServer.Start();
 
@@ -52,6 +55,7 @@ namespace IzudisbotBSP
             _webServer = null;
             _service?.Stop();
             _service = null;
+            try { VoiceIndicator.Shutdown(); } catch { }
             Log?.Info("izudisbot-bsp disabled");
         }
     }
