@@ -1,6 +1,7 @@
 name: Build & Release
 
 # 버전 태그(v0.1.0 등)를 push 하면 자동으로 빌드 → zip → Release 업로드.
+# BS_REFS_B64 시크릿이 없으면 빌드는 깔끔하게 건너뜀(실패 X). 시크릿만 넣으면 자동 활성화.
 on:
   push:
     tags:
@@ -10,7 +11,28 @@ permissions:
   contents: write   # Release 생성/업로드에 필요
 
 jobs:
+  # 게임 참조 DLL 시크릿이 설정돼 있는지 확인하는 게이트.
+  # 없으면 build 잡을 건너뛰어서 빨간 실패 대신 'skipped' 로 끝난다.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - id: check
+        shell: bash
+        env:
+          BS_REFS_B64: ${{ secrets.BS_REFS_B64 }}
+        run: |
+          if [ -z "$BS_REFS_B64" ]; then
+            echo "::warning::BS_REFS_B64 시크릿이 없어 CI 빌드를 건너뜁니다(수동 릴리스 사용 중)."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: windows-latest
 
     steps:
@@ -30,10 +52,6 @@ jobs:
         env:
           BS_REFS_B64: ${{ secrets.BS_REFS_B64 }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:BS_REFS_B64)) {
-            Write-Error "Secret 'BS_REFS_B64' 가 설정되어 있지 않습니다. tools/pack-refs.ps1 참고."
-            exit 1
-          }
           [IO.File]::WriteAllBytes("refs.zip", [Convert]::FromBase64String($env:BS_REFS_B64))
           $dest = Join-Path $env:GITHUB_WORKSPACE "_refs"
           Expand-Archive -Path "refs.zip" -DestinationPath $dest -Force
