@@ -15,6 +15,8 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 ### What it does
 - Shows Discord channel messages on the **BeatSaberPlus_Chat** overlay (with emotes)
 - Queues songs into **BeatSaberPlus_ChatRequest** when a message is `!bsr <code>`
+- **Discord voice-channel member count** shown as a separate floating panel (a Discord-colored ● + count), visible in both the menu and gameplay and grab-to-move with VR controllers
+- **`!bsr` request feedback** — sends the request result (queued / rejected / queue closed) back to the bot so Discord users get a reply
 - Auto-reconnects if the connection drops
 - **Local web UI** (English/Korean toggle) to configure everything live — no restart
 - **In-game button** in the left Mods tab to open the web UI
@@ -101,6 +103,8 @@ Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and up
 ### 무슨 일을 하나요
 - 디스코드 채널 메시지를 **BeatSaberPlus_Chat** 오버레이에 표시 (이모지 포함)
 - 메시지가 `!bsr <코드>` 면 **BeatSaberPlus_ChatRequest** 큐에 자동 추가
+- **디스코드 음성채널 인원수**를 별도 floating 패널(디스코드 색 ● + 숫자)로 표시 — 메뉴/플레이 양쪽에서 보이고 VR 컨트롤러로 잡아 이동 가능
+- **`!bsr` 신청 결과 피드백** — 신청 결과(큐 추가 / 거절 / 큐 닫힘)를 봇으로 다시 보내 디스코드 사용자가 응답을 받음
 - 연결이 끊기면 자동 재접속
 - **로컬 웹 UI**(영어/한국어 전환)로 모든 설정을 재시작 없이 실시간 변경
 - 메인 메뉴 좌측 **Mods 탭의 인게임 버튼**으로 웹 UI 열기
@@ -187,6 +191,8 @@ dotnet build -c Release /p:CopyToPlugins=true
 ### 機能
 - Discord チャンネルのメッセージを **BeatSaberPlus_Chat** オーバーレイに表示（絵文字対応）
 - メッセージが `!bsr <コード>` の場合 **BeatSaberPlus_ChatRequest** のキューに自動追加
+- **Discord ボイスチャンネルの人数**を別の floating パネル（Discord カラーの ● + 数字）で表示 — メニュー/プレイ両方で表示され、VR コントローラーで掴んで移動可能
+- **`!bsr` リクエスト結果のフィードバック** — リクエスト結果（キュー追加 / 拒否 / キュー閉鎖）をボットへ返信し、Discord ユーザーに応答が届く
 - 切断時は自動再接続
 - **ローカル Web UI**（英語/韓国語/日本語 切替）で再起動なしに設定をリアルタイム変更
 - メインメニュー左の **Mods タブのボタン**から Web UI を開く
