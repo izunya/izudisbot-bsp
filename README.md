@@ -8,6 +8,12 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 [Discord channel] ──(izudisbot bot)──▶ [WebSocket] ──▶ izudisbot-bsp ──▶ BeatSaberPlus Chat / ChatRequest
 ```
 
+> **⚠️ Requires the izudisbot Discord bot** — this plugin only bridges into the game. You need the **izudisbot** Discord bot, set up at **<https://izudisbot.izunya.dev>**.
+>
+> **⚠️ izudisbot 디스코드 봇이 필요합니다** — 이 플러그인은 게임으로 연결만 합니다. **izudisbot** 디스코드 봇이 있어야 하며 **<https://izudisbot.izunya.dev>** 에서 설정합니다.
+>
+> **⚠️ izudisbot Discord ボットが必要です** — このプラグインはゲームへの橋渡しのみ行います。**izudisbot** ボットが必要で、**<https://izudisbot.izunya.dev>** で設定します。
+
 ---
 
 ## English
@@ -28,6 +34,7 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 | **Beat Saber 1.40.8** | Built against this version |
 | **BSIPA 4.3.0+** | Mod loader |
 | **BeatSaberPlus** | `Chat` (required); `ChatRequest` for song requests |
+| **izudisbot Discord bot** | **Required** — the Discord bot this bridge talks to. Set up at <https://izudisbot.izunya.dev> |
 | **izudisbot bot token** | Issue a `bsp_xxx` token from the [dashboard](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge) |
 
 ### Install
@@ -116,6 +123,7 @@ Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and up
 | **Beat Saber 1.40.8** | 이 버전 기준 빌드 |
 | **BSIPA 4.3.0+** | 모드 로더 |
 | **BeatSaberPlus** | `Chat`(필수), 곡 신청은 `ChatRequest` |
+| **izudisbot 디스코드 봇** | **필수** — 이 브리지가 연결하는 디스코드 봇. <https://izudisbot.izunya.dev> 에서 설정 |
 | **izudisbot 봇 토큰** | [대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 `bsp_xxx` 발급 |
 
 ### 설치
@@ -204,6 +212,7 @@ dotnet build -c Release /p:CopyToPlugins=true
 | **Beat Saber 1.40.8 / 1.29.1** | 各バージョン用 zip を配布 |
 | **BSIPA 4.3.0+** | Mod ローダー |
 | **BeatSaberPlus** | `Chat`（必須）、曲リクエストは `ChatRequest` |
+| **izudisbot Discord ボット** | **必須** — このブリッジが通信する Discord ボット。<https://izudisbot.izunya.dev> で設定 |
 | **izudisbot ボットトークン** | [ダッシュボード](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)で `bsp_xxx` を発行 |
 
 ### インストール
