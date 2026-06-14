@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 
@@ -10,8 +11,8 @@ namespace IzudisbotBSP
     /// </summary>
     public class Config
     {
-        /// <summary>WebSocket URL. 예: ws://localhost:3411/bsp 또는 wss://your-host/bsp</summary>
-        public string Url { get; set; } = "ws://localhost:3411/bsp";
+        /// <summary>WebSocket URL. 기본값으로 고정 사용 (고급 사용자만 JSON 으로 변경).</summary>
+        public string Url { get; set; } = "wss://bsp.izunya.dev/bsp";
 
         /// <summary>대시보드에서 발급받은 bsp_xxx 토큰</summary>
         public string Token { get; set; } = "";
@@ -22,9 +23,28 @@ namespace IzudisbotBSP
         /// <summary>재접속 간격 (초)</summary>
         public int ReconnectIntervalSec { get; set; } = 10;
 
+        // ---- 로컬 웹 UI ----
+
+        /// <summary>모드 자체 로컬 웹 설정 UI 사용 여부</summary>
+        public bool WebUIEnabled { get; set; } = true;
+
+        /// <summary>로컬 웹 UI 포트 (localhost 전용). 변경 시 게임 재시작 필요.</summary>
+        public int WebUIPort { get; set; } = 9001;
+
+        /// <summary>비트세이버 실행 시 웹 UI 를 기본 브라우저로 자동으로 열지 여부</summary>
+        public bool OpenWebOnLaunch { get; set; } = true;
+
+        // ---- 필터 ----
+
+        /// <summary>게임으로 전달하지 않을(음소거) 채널 ID 목록</summary>
+        public List<string> DisabledChannels { get; set; } = new List<string>();
+
+        /// <summary>true 면 '!' 로 시작하는 명령어 메시지만 게임으로 전달</summary>
+        public bool ForwardOnlyCommands { get; set; } = false;
+
         public static Config Current { get; private set; } = new Config();
 
-        private static string FilePath => Path.Combine(
+        public static string FilePath => Path.Combine(
             Environment.CurrentDirectory, "UserData", "izudisbot-bsp.json"
         );
 

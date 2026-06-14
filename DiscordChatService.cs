@@ -44,10 +44,42 @@ namespace IzudisbotBSP
         private bool _connected;
         private Timer _reconnectTimer;
 
+        // ---- 웹 UI 용 상태/로그/채널 통계 ----
+        private readonly object _logLock = new object();
+        private readonly LinkedList<LogEntry> _recentLog = new LinkedList<LogEntry>();
+        private readonly Dictionary<string, ChannelStat> _channelStats = new Dictionary<string, ChannelStat>();
+        private DateTime? _lastMessageUtc;
+        private const int MaxLog = 200;
+
         public DiscordChatService(Config config, IPALogger log)
         {
             _config = config;
             _log = log;
+        }
+
+        // 웹 UI 로 넘기는 직렬화용 DTO (public 필드 → Newtonsoft 가 그대로 직렬화)
+        public class ChannelInfo
+        {
+            public string Id { get; set; }
+            public string Name { get; set; }
+            public long Count { get; set; }
+            public bool Enabled { get; set; }
+        }
+
+        public class LogEntry
+        {
+            public string Time { get; set; }
+            public string Channel { get; set; }
+            public string User { get; set; }
+            public string Content { get; set; }
+            public bool Forwarded { get; set; }
+        }
+
+        private class ChannelStat
+        {
+            public string Id;
+            public string Name;
+            public long Count;
         }
 
         public ReadOnlyCollection<(IChatService, IChatChannel)> Channels
@@ -85,6 +117,71 @@ namespace IzudisbotBSP
         public void RecacheEmotes() { }
 
         // ================================================================
+        // 로컬 웹 UI 지원 — 상태 조회 / 로그 / 채널·필터 제어
+        // ================================================================
+
+        public bool Connected => _connected;
+        public string CurrentUrl => _config.Url;
+        public bool TokenSet => !string.IsNullOrEmpty(_config.Token);
+
+        public DateTime? LastMessageUtc
+        {
+            get { lock (_logLock) { return _lastMessageUtc; } }
+        }
+
+        /// <summary>채널 목록 + 누적 수신 수 + 음소거 여부 (수신 많은 순).</summary>
+        public List<ChannelInfo> GetChannels()
+        {
+            lock (_lock)
+            {
+                var muted = _config.DisabledChannels ?? new List<string>();
+                return _channelStats.Values
+                    .Select(s => new ChannelInfo
+                    {
+                        Id = s.Id,
+                        Name = s.Name,
+                        Count = s.Count,
+                        Enabled = !muted.Contains(s.Id)
+                    })
+                    .OrderByDescending(c => c.Count)
+                    .ToList();
+            }
+        }
+
+        /// <summary>최근 수신 메시지 (신규순).</summary>
+        public List<LogEntry> GetRecentLog(int max = 100)
+        {
+            lock (_logLock)
+            {
+                return _recentLog.Take(Math.Max(1, max)).ToList();
+            }
+        }
+
+        public void ClearLog()
+        {
+            lock (_logLock) { _recentLog.Clear(); }
+        }
+
+        /// <summary>채널 음소거/해제 후 저장.</summary>
+        public void SetChannelEnabled(string channelId, bool enabled)
+        {
+            if (string.IsNullOrEmpty(channelId)) return;
+            if (_config.DisabledChannels == null) _config.DisabledChannels = new List<string>();
+            if (enabled) _config.DisabledChannels.RemoveAll(x => x == channelId);
+            else if (!_config.DisabledChannels.Contains(channelId)) _config.DisabledChannels.Add(channelId);
+            Config.Save();
+        }
+
+        /// <summary>웹에서 설정 변경 후 호출 — 저장 + 즉시 재접속.</summary>
+        public void SaveAndReconnect()
+        {
+            Config.Save();
+            _log?.Info("Config updated via local web → reconnecting: " + _config.Url);
+            DisposeSocket();
+            Connect();
+        }
+
+        // ================================================================
         // IChatService — web UI
         //   BSP 웹 설정 페이지에 폼을 띄워, 게임 재시작 없이 실시간으로
         //   Url/Token 등을 수정 → 저장 즉시 재접속.
@@ -93,10 +190,6 @@ namespace IzudisbotBSP
         public string WebPageHTMLForm()
         {
             return
-                "<div class='form-group'>" +
-                "  <label>WebSocket URL</label>" +
-                "  <input type='text' class='form-control' name='Url' value='" + Escape(_config.Url) + "' placeholder='wss://bsp.izunya.dev/bsp'>" +
-                "</div>" +
                 "<div class='form-group'>" +
                 "  <label>Token</label>" +
                 "  <input type='text' class='form-control' name='Token' value='" + Escape(_config.Token) + "' placeholder='bsp_...'>" +
@@ -274,6 +367,18 @@ namespace IzudisbotBSP
                     color: userObj["color"]?.ToString()
                 );
                 var content = obj["content"]?.ToString() ?? "";
+
+                // ---- 필터 판단 ----
+                var chId = channelObj["id"]?.ToString() ?? "unknown";
+                var muted = _config.DisabledChannels?.Contains(chId) ?? false;
+                var isCommand = content.StartsWith("!");
+                var forward = !muted && (!_config.ForwardOnlyCommands || isCommand);
+
+                // ---- 통계/로그 기록 (필터와 무관하게 전부 — 웹 미리보기용) ----
+                RecordIncoming(chId, channel.Name, user.UserName, content, forward);
+
+                if (!forward) return;
+
                 var emotes = ParseEmotes(obj["emotes"] as JArray);
                 var message = new DiscordChatMessage(
                     id: Guid.NewGuid().ToString(),
@@ -307,6 +412,28 @@ namespace IzudisbotBSP
                 list.Add(new DiscordChatEmote(id, name, uri, startIndex, endIndex, animated));
             }
             return list.ToArray();
+        }
+
+        private void RecordIncoming(string chId, string chName, string user, string content, bool forwarded)
+        {
+            lock (_lock)
+            {
+                if (_channelStats.TryGetValue(chId, out var st)) { st.Count++; st.Name = chName; }
+                else _channelStats[chId] = new ChannelStat { Id = chId, Name = chName, Count = 1 };
+            }
+            lock (_logLock)
+            {
+                _lastMessageUtc = DateTime.UtcNow;
+                _recentLog.AddFirst(new LogEntry
+                {
+                    Time = DateTime.Now.ToString("HH:mm:ss"),
+                    Channel = chName,
+                    User = user,
+                    Content = content,
+                    Forwarded = forwarded
+                });
+                while (_recentLog.Count > MaxLog) _recentLog.RemoveLast();
+            }
         }
 
         private DiscordChatChannel GetOrCreateChannel(JObject obj)

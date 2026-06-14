@@ -17,6 +17,7 @@ namespace IzudisbotBSP
     {
         public static IPALogger Log { get; private set; }
         private DiscordChatService _service;
+        private WebServer _webServer;
 
         [Init]
         public Plugin(IPALogger logger)
@@ -33,11 +34,22 @@ namespace IzudisbotBSP
             CP_SDK.Chat.Service.RegisterExternalService(_service);
             _service.Start();
             Log.Info("DiscordChatService registered → " + (Config.Current.Url ?? "(unconfigured)"));
+
+            _webServer = new WebServer(_service, Config.Current, Log);
+            _webServer.Start();
+
+            if (Config.Current.WebUIEnabled && Config.Current.OpenWebOnLaunch)
+                _webServer.OpenInBrowser();
+
+            InGameMenu.Register(_webServer, Log);
         }
 
         [OnDisable]
         public void OnDisable()
         {
+            InGameMenu.Unregister(Log);
+            _webServer?.Stop();
+            _webServer = null;
             _service?.Stop();
             _service = null;
             Log?.Info("izudisbot-bsp disabled");

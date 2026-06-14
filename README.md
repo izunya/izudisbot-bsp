@@ -1,119 +1,181 @@
-# izudisbot-bsp — Discord → BeatSaberPlus 채팅 브리지
+# izudisbot-bsp — Discord → BeatSaberPlus Chat Bridge
 
-izudisbot 봇이 보내주는 **디스코드 채널 메시지를 게임 안 BeatSaberPlus 채팅 오버레이로 그대로 띄워주는** BSIPA 플러그인입니다.
-디스코드에서 누가 채팅을 치면 Beat Saber 화면의 BSP Chat 창에 실시간으로 나타나고, `!bsr <코드>` 를 치면 ChatRequest 큐에 곡이 자동으로 들어갑니다.
+> [English](#english) · [한국어](#한국어)
+
+A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSaberPlus chat overlay** (and `!bsr` song requests). When someone types in your Discord channel, it appears live on the Beat Saber BSP Chat overlay; `!bsr <code>` is queued into ChatRequest automatically.
 
 ```
-[디스코드 채널]  ──(izudisbot 봇)──▶  [WebSocket]  ──▶  izudisbot-bsp  ──▶  BeatSaberPlus Chat / ChatRequest
+[Discord channel] ──(izudisbot bot)──▶ [WebSocket] ──▶ izudisbot-bsp ──▶ BeatSaberPlus Chat / ChatRequest
 ```
 
 ---
 
-## 무슨 일을 하나요?
+## English
 
-- 디스코드 채널의 메시지를 게임 내 **BeatSaberPlus_Chat** 오버레이에 표시
-- 메시지에 포함된 **이모지**도 함께 표시
-- `!bsr <맵코드>` 입력 시 **BeatSaberPlus_ChatRequest** 큐에 자동 추가
-- 연결이 끊기면 **자동 재접속**
+### What it does
+- Shows Discord channel messages on the **BeatSaberPlus_Chat** overlay (with emotes)
+- Queues songs into **BeatSaberPlus_ChatRequest** when a message is `!bsr <code>`
+- Auto-reconnects if the connection drops
+- **Local web UI** (English/Korean toggle) to configure everything live — no restart
+- **In-game button** in the left Mods tab to open the web UI
+- Optionally **opens the web UI in your browser every time Beat Saber launches**
 
-> 현재는 **단방향(디스코드 → 게임)** 입니다. 게임 채팅을 디스코드로 보내는 기능은 아직 없습니다.
-
----
-
-## 작동에 필요한 것
-
-| 필요한 것 | 설명 |
+### Requirements
+| Need | Notes |
 |---|---|
-| **Beat Saber 1.40.8** | 이 버전 기준으로 빌드됨 |
-| **BSIPA 4.3.0 이상** | 모드 로더 |
-| **BeatSaberPlus** | `BeatSaberPlus_Chat` (필수), 곡 신청 쓰려면 `BeatSaberPlus_ChatRequest` 도 필요 |
-| **izudisbot 봇 + 브리지 토큰** | 봇이 디스코드 메시지를 WebSocket 으로 보내줘야 함. [대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 `bsp_xxx` 토큰 발급 |
+| **Beat Saber 1.40.8** | Built against this version |
+| **BSIPA 4.3.0+** | Mod loader |
+| **BeatSaberPlus** | `Chat` (required); `ChatRequest` for song requests |
+| **izudisbot bot token** | Issue a `bsp_xxx` token from the [dashboard](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge) |
 
-> BSIPA / BeatSaberPlus 가 안 깔려 있으면 이 플러그인은 동작하지 않습니다. 모드 매니저(BSManager 등)로 의존성을 먼저 설치하세요.
+### Install
+1. Download the latest `izudisbot-bsp-x.y.z.zip` from [**Releases**](../../releases).
+2. Extract it into your **Beat Saber install folder root** → `izudisbot-bsp.dll` lands in `Plugins\`.
+3. Launch the game once, then quit (creates the config file).
 
----
+### Configure
+There are three ways; the web UI is recommended.
 
-## 설치 방법
+**1. Local web UI (recommended)** — open **http://localhost:9001/** in your browser.
+Enter your `Token`, toggle auto-reconnect, manage channels (forward on/off), watch the live message log. The bridge URL is preset (`wss://bsp.izunya.dev/bsp`), so you only need the token. Saving applies instantly (no restart). Top-right button toggles English/Korean.
 
-1. [**Releases**](../../releases) 에서 최신 `izudisbot-bsp-x.y.z.zip` 을 받습니다.
-2. zip 을 **Beat Saber 설치 폴더 루트**에 압축을 풉니다 → `izudisbot-bsp.dll` 이 자동으로 `Plugins\` 안으로 들어갑니다.
-   예: `...\Beat Saber\Plugins\izudisbot-bsp.dll`
-3. 게임을 한 번 실행했다 종료합니다 → 설정 파일이 자동 생성됩니다.
+**2. In-game** — in the main menu's left **Mods** tab, click the **izudisbot** button to open the web UI.
 
----
-
-## 설정
-
-설정을 바꾸는 방법은 두 가지입니다.
-
-### 방법 1 — BSP 웹 설정에서 실시간 수정 (권장)
-
-BeatSaberPlus 의 **웹 설정 페이지**(Chat 설정에서 열 수 있는 `http://localhost:<포트>`)를 브라우저로 열면, 채팅 서비스 목록에 **Discord** 항목이 나타납니다. 거기서 `Url` / `Token` / `Auto reconnect` / `Reconnect interval` 을 입력하고 저장하면 **게임 재시작 없이 즉시 적용·재접속**됩니다.
-
-### 방법 2 — JSON 파일 직접 편집
-
-게임을 한 번 켰다 끄면 **`UserData\izudisbot-bsp.json`** 파일이 생성됩니다. 게임을 **종료한 상태**에서 메모장으로 열어 수정하세요.
-
+**3. JSON file** — edit `UserData\izudisbot-bsp.json` while the game is closed:
 ```json
 {
     "Url": "wss://bsp.izunya.dev/bsp",
     "Token": "bsp_xxxxxxxxxxxxxxxxxxxxx",
     "AutoReconnect": true,
-    "ReconnectIntervalSec": 10
+    "ReconnectIntervalSec": 10,
+    "WebUIEnabled": true,
+    "WebUIPort": 9001,
+    "OpenWebOnLaunch": true,
+    "ForwardOnlyCommands": false,
+    "DisabledChannels": []
 }
 ```
+- **Token** — your `bsp_xxx` token (sent via a cookie header). This is the only thing you normally set.
+- **Url** — bridge endpoint, preset to `wss://bsp.izunya.dev/bsp`; advanced/optional
+- **WebUIPort** — local web UI port (changing it needs a game restart)
+- **OpenWebOnLaunch** — auto-open the web UI in your browser on launch
+- **ForwardOnlyCommands** — only forward `!`-commands to the game
+- **DisabledChannels** — channel IDs muted from forwarding
 
-| 항목 | 설명 |
-|---|---|
-| **Url** | 봇 WebSocket 주소. 기본값: `wss://bsp.izunya.dev/bsp` (로컬 테스트 시 `ws://localhost:3411/bsp`) |
-| **Token** | [대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 발급받은 `bsp_xxx` 토큰 |
-| **AutoReconnect** | 끊겼을 때 자동 재접속 여부 |
-| **ReconnectIntervalSec** | 재접속 시도 간격(초) |
+### Usage
+1. Get a token on the [dashboard](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge) and pick the Discord channel(s) to forward.
+2. Enter your `Token` (web UI or JSON). The URL is already preset.
+3. Messages in the Discord channel show up on the BSP Chat overlay.
+4. `!bsr <map code>` is added to the song-request queue.
 
-JSON 파일을 직접 편집한 경우 저장 후 게임을 다시 실행하면 적용됩니다. (웹 설정으로 바꾸면 재시작 불필요)
-
----
-
-## 사용 방법
-
-1. [봇 대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 **토큰 발급** + 게임으로 전달할 **디스코드 채널 선택**
-2. `Url` 과 `Token` 입력 (위 **설정** 참고 — BSP 웹 설정에서 실시간으로, 또는 JSON 파일에)
-3. 등록한 디스코드 채널에 누가 메시지를 보내면 → 게임 내 BSP Chat 오버레이에 표시됩니다
-4. 디스코드에서 `!bsr <맵코드>` 입력 → 곡 신청 큐에 자동 추가됩니다
-
-### 잘 연결됐는지 확인
-
-게임 로그(`Logs\_latest.log`)에서 아래 메시지가 보이면 정상입니다:
-
+Connected correctly when the game log (`Logs\_latest.log`) shows:
 ```
-[izudisbot-bsp] DiscordChatService registered → wss://bsp.izunya.dev/bsp
 [izudisbot-bsp] Connected: wss://bsp.izunya.dev/bsp
+[izudisbot-bsp] Local web UI: http://localhost:9001/
 ```
 
----
-
-## 문제 해결
-
-| 증상 | 원인 / 해결 |
+### Troubleshooting
+| Symptom | Fix |
 |---|---|
-| `Discord: URL/Token 미설정` | `UserData\izudisbot-bsp.json` 의 Url/Token 입력 후 재시작 |
-| `disconnected (1008)` | 토큰이 무효이거나 만료/회수됨 → 새 토큰 발급 |
-| `disconnected (1006)` | URL 이 잘못됐거나 봇 서버가 꺼져 있음 |
-| 게임에 채팅이 안 보임 | BeatSaberPlus 의 **Chat** 모듈이 켜져 있는지 확인 |
-| `!bsr` 가 안 먹힘 | BeatSaberPlus 의 **ChatRequest** 모듈도 켜져 있어야 함 |
-| 플러그인이 아예 안 뜸 | BSIPA / BeatSaberPlus 설치 여부, 게임 버전(1.40.8) 확인 |
+| `Discord: URL/Token not set` | Enter Url/Token, then reconnect |
+| `disconnected (1008)` | Token invalid/revoked → issue a new one |
+| `disconnected (1006)` | Wrong URL or the bot server is down |
+| Web UI won't open | Check `WebUIEnabled`, the port, and that the game is running |
+| In-game button missing | BSML/Zenject timing — non-fatal; use the web UI instead |
+| No chat in game | Make sure the BeatSaberPlus **Chat** module is enabled |
+| `!bsr` ignored | The **ChatRequest** module must also be enabled |
 
----
-
-## 개발자용 (직접 빌드)
-
-- Windows + .NET SDK 8 + .NET Framework 4.7.2 + Beat Saber(BSIPA·BeatSaberPlus 포함) 설치 환경 필요
-- `Directory.Build.props` 의 `BeatSaberDir` 를 본인 설치 경로로 맞추거나 환경변수 `BeatSaberDir` 설정
-
+### Build it yourself
+Needs Windows + .NET SDK 8 + .NET Framework 4.7.2 + Beat Saber (with BSIPA, BeatSaberPlus, BSML). Set `BeatSaberDir` in `Directory.Build.props` (or the env var) to your install.
 ```cmd
 dotnet build -c Release
-:: 빌드 후 Plugins 폴더로 자동 복사
+:: build + copy into the game's Plugins folder
 dotnet build -c Release /p:CopyToPlugins=true
 ```
+Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and upload a Release (CI build needs the `BS_REFS_B64` secret containing the game reference DLLs).
 
-GitHub 에서 `v*` 형식의 태그(예: `v0.1.0`)를 push 하면 GitHub Actions 가 자동으로 빌드 → zip 생성 → Releases 업로드까지 처리합니다. (러너 빌드에는 게임 참조 DLL 을 담은 `BS_REFS_B64` 시크릿이 필요합니다.)
+---
+
+## 한국어
+
+### 무슨 일을 하나요
+- 디스코드 채널 메시지를 **BeatSaberPlus_Chat** 오버레이에 표시 (이모지 포함)
+- 메시지가 `!bsr <코드>` 면 **BeatSaberPlus_ChatRequest** 큐에 자동 추가
+- 연결이 끊기면 자동 재접속
+- **로컬 웹 UI**(영어/한국어 전환)로 모든 설정을 재시작 없이 실시간 변경
+- 메인 메뉴 좌측 **Mods 탭의 인게임 버튼**으로 웹 UI 열기
+- 옵션으로 **비트세이버 실행 때마다 웹 UI 자동 열기**
+
+### 작동에 필요한 것
+| 필요 | 비고 |
+|---|---|
+| **Beat Saber 1.40.8** | 이 버전 기준 빌드 |
+| **BSIPA 4.3.0+** | 모드 로더 |
+| **BeatSaberPlus** | `Chat`(필수), 곡 신청은 `ChatRequest` |
+| **izudisbot 봇 토큰** | [대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 `bsp_xxx` 발급 |
+
+### 설치
+1. [**Releases**](../../releases)에서 최신 `izudisbot-bsp-x.y.z.zip` 다운로드.
+2. **Beat Saber 설치 폴더 루트**에 압축 해제 → `izudisbot-bsp.dll` 이 `Plugins\` 로 들어감.
+3. 게임을 한 번 실행했다 종료 (설정 파일 생성).
+
+### 설정
+세 가지 방법이 있으며 웹 UI를 권장합니다.
+
+**1. 로컬 웹 UI (권장)** — 브라우저에서 **http://localhost:9001/** 접속.
+`Token` 입력, 자동 재접속 토글, 채널 전달 on/off, 실시간 메시지 로그 확인. 브리지 URL은 `wss://bsp.izunya.dev/bsp` 로 고정이라 토큰만 넣으면 됩니다. 저장 시 재시작 없이 즉시 적용. 우측 상단 버튼으로 영어/한국어 전환.
+
+**2. 인게임** — 메인 메뉴 좌측 **Mods 탭**의 **izudisbot** 버튼 클릭 → 웹 UI 열림.
+
+**3. JSON 파일** — 게임 종료 상태에서 `UserData\izudisbot-bsp.json` 편집:
+```json
+{
+    "Url": "wss://bsp.izunya.dev/bsp",
+    "Token": "bsp_xxxxxxxxxxxxxxxxxxxxx",
+    "AutoReconnect": true,
+    "ReconnectIntervalSec": 10,
+    "WebUIEnabled": true,
+    "WebUIPort": 9001,
+    "OpenWebOnLaunch": true,
+    "ForwardOnlyCommands": false,
+    "DisabledChannels": []
+}
+```
+- **Token** — `bsp_xxx` 토큰 (쿠키 헤더로 전송). 보통 이것만 설정하면 됩니다.
+- **Url** — 브리지 주소, `wss://bsp.izunya.dev/bsp` 로 고정 (고급/선택)
+- **WebUIPort** — 로컬 웹 UI 포트 (변경 시 게임 재시작 필요)
+- **OpenWebOnLaunch** — 실행 시 웹 UI 자동 열기
+- **ForwardOnlyCommands** — `!` 명령어만 게임으로 전달
+- **DisabledChannels** — 전달 음소거할 채널 ID 목록
+
+### 사용 방법
+1. [대시보드](https://izudisbot.izunya.dev/dashboard/me/bsp-bridge)에서 토큰 발급 + 전달할 디스코드 채널 선택.
+2. `Token` 입력 (웹 UI 또는 JSON). URL은 이미 고정돼 있습니다.
+3. 디스코드 채널 메시지가 BSP Chat 오버레이에 표시됩니다.
+4. `!bsr <맵코드>` 는 곡 신청 큐에 자동 추가됩니다.
+
+게임 로그(`Logs\_latest.log`)에 아래가 보이면 정상:
+```
+[izudisbot-bsp] Connected: wss://bsp.izunya.dev/bsp
+[izudisbot-bsp] Local web UI: http://localhost:9001/
+```
+
+### 문제 해결
+| 증상 | 해결 |
+|---|---|
+| `Discord: URL/Token 미설정` | Url/Token 입력 후 재접속 |
+| `disconnected (1008)` | 토큰 무효/회수됨 → 새 토큰 발급 |
+| `disconnected (1006)` | URL 오류 또는 봇 서버 꺼짐 |
+| 웹 UI 안 열림 | `WebUIEnabled`/포트 확인, 게임 실행 중인지 확인 |
+| 인게임 버튼 없음 | BSML/Zenject 타이밍 문제 — 치명적 아님, 웹 UI 사용 |
+| 게임에 채팅 안 보임 | BeatSaberPlus **Chat** 모듈 켜짐 확인 |
+| `!bsr` 안 먹힘 | **ChatRequest** 모듈도 켜져 있어야 함 |
+
+### 직접 빌드
+Windows + .NET SDK 8 + .NET Framework 4.7.2 + Beat Saber(BSIPA·BeatSaberPlus·BSML 포함) 필요. `Directory.Build.props` 의 `BeatSaberDir`(또는 환경변수)를 설치 경로로 설정.
+```cmd
+dotnet build -c Release
+:: 빌드 후 게임 Plugins 폴더로 복사
+dotnet build -c Release /p:CopyToPlugins=true
+```
+`v*` 태그(예: `v0.1.1`)를 push 하면 GitHub Actions 가 빌드 → zip → Release 업로드까지 자동 처리합니다 (CI 빌드에는 게임 참조 DLL 을 담은 `BS_REFS_B64` 시크릿 필요).
