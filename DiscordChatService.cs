@@ -85,14 +85,69 @@ namespace IzudisbotBSP
         public void RecacheEmotes() { }
 
         // ================================================================
-        // IChatService — web UI (BSP 설정 페이지에 노출되는 부분 — 우린 비움)
+        // IChatService — web UI
+        //   BSP 웹 설정 페이지에 폼을 띄워, 게임 재시작 없이 실시간으로
+        //   Url/Token 등을 수정 → 저장 즉시 재접속.
         // ================================================================
 
-        public string WebPageHTMLForm() => "";
+        public string WebPageHTMLForm()
+        {
+            return
+                "<div class='form-group'>" +
+                "  <label>WebSocket URL</label>" +
+                "  <input type='text' class='form-control' name='Url' value='" + Escape(_config.Url) + "' placeholder='wss://bsp.izunya.dev/bsp'>" +
+                "</div>" +
+                "<div class='form-group'>" +
+                "  <label>Token</label>" +
+                "  <input type='text' class='form-control' name='Token' value='" + Escape(_config.Token) + "' placeholder='bsp_...'>" +
+                "</div>" +
+                "<div class='form-group'>" +
+                "  <label>Reconnect interval (sec)</label>" +
+                "  <input type='number' min='1' class='form-control' name='ReconnectIntervalSec' value='" + _config.ReconnectIntervalSec + "'>" +
+                "</div>" +
+                "<div class='form-check'>" +
+                "  <input type='checkbox' class='form-check-input' id='izudisbot-autoreconnect' name='AutoReconnect' " + (_config.AutoReconnect ? "checked" : "") + ">" +
+                "  <label class='form-check-label' for='izudisbot-autoreconnect'>Auto reconnect</label>" +
+                "</div>";
+        }
+
         public string WebPageHTML() => "";
         public string WebPageJS() => "";
         public string WebPageJSValidate() => "";
-        public void WebPageOnPost(Dictionary<string, string> postData) { }
+
+        public void WebPageOnPost(Dictionary<string, string> postData)
+        {
+            if (postData == null) return;
+
+            if (postData.TryGetValue("Url", out var url))
+                _config.Url = (url ?? "").Trim();
+            if (postData.TryGetValue("Token", out var token))
+                _config.Token = (token ?? "").Trim();
+
+            // 체크박스: 값이 false/0/off 가 아니면 켜진 것으로 본다. 키 자체가 없으면 꺼짐.
+            _config.AutoReconnect = postData.TryGetValue("AutoReconnect", out var ar)
+                && (ar == null || (ar != "false" && ar != "0" && ar != "off"));
+
+            if (postData.TryGetValue("ReconnectIntervalSec", out var ivStr) && int.TryParse(ivStr, out var iv))
+                _config.ReconnectIntervalSec = Math.Max(1, iv);
+
+            Config.Save();
+            _log?.Info("Config updated via web → reconnecting: " + _config.Url);
+
+            // 재시작 없이 새 Url/Token 으로 즉시 재접속
+            DisposeSocket();
+            Connect();
+        }
+
+        private static string Escape(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            return s.Replace("&", "&amp;")
+                    .Replace("\"", "&quot;")
+                    .Replace("'", "&#39;")
+                    .Replace("<", "&lt;")
+                    .Replace(">", "&gt;");
+        }
 
         // ================================================================
         // IChatService — outbound (BSP → Discord) — 향후 확장
@@ -132,9 +187,9 @@ namespace IzudisbotBSP
             try
             {
                 DisposeSocket();
-                var sep = _config.Url.Contains("?") ? "&" : "?";
-                var uri = _config.Url + sep + "token=" + Uri.EscapeDataString(_config.Token);
-                _ws = new WebSocket(uri);
+                // 토큰을 Cookie 헤더로 전송 (URL query 대신 — Cloudflare access log 노출 회피)
+                _ws = new WebSocket(_config.Url);
+                _ws.SetCookie(new WebSocketSharp.Net.Cookie("bsp_token", _config.Token));
                 _ws.OnOpen += (s, e) =>
                 {
                     _connected = true;
