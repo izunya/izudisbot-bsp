@@ -1,7 +1,7 @@
 namespace IzudisbotBSP
 {
     /// <summary>
-    /// 로컬 웹 UI 의 단일 HTML 페이지 (영어/한국어 토글 내장).
+    /// 로컬 웹 UI 의 단일 HTML 페이지 (영어/한국어/일본어 드롭다운).
     /// C# verbatim 문자열이라 큰따옴표는 피하고 HTML 속성/JS 문자열은 작은따옴표·백틱으로만 작성.
     /// </summary>
     public static class WebUiPage
@@ -13,6 +13,7 @@ namespace IzudisbotBSP
 <meta name='viewport' content='width=device-width, initial-scale=1'>
 <title>izudisbot Discord Bridge</title>
 <link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css' rel='stylesheet'>
+<script src='https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js'></script>
 <style>
  body{padding-bottom:48px}
  .log{font-family:ui-monospace,Consolas,monospace;font-size:.84rem;max-height:380px;overflow-y:auto}
@@ -26,7 +27,10 @@ namespace IzudisbotBSP
   <div class='container'>
    <span class='navbar-brand mb-0'>🟦 izudisbot Discord Bridge</span>
    <span>
-    <button id='langbtn' class='btn btn-sm btn-outline-secondary me-2' onclick='toggleLang()'>한국어</button>
+    <div class='dropdown d-inline-block me-2'>
+     <button id='langbtn' class='btn btn-sm btn-outline-secondary dropdown-toggle' type='button' data-bs-toggle='dropdown' aria-expanded='false'>🌐 EN</button>
+     <ul id='langmenu' class='dropdown-menu dropdown-menu-end'></ul>
+    </div>
     <span id='conn' class='badge text-bg-secondary'>…</span>
    </span>
   </div>
@@ -63,6 +67,7 @@ namespace IzudisbotBSP
         <input id='pair-name' type='text' class='form-control form-control-sm mb-3' />
         <div class='small text-muted mb-1' data-i18n='pair.pickChannels'></div>
         <div id='pair-guilds' class='border rounded p-2 mb-3' style='max-height:240px;overflow-y:auto;font-size:.85rem'></div>
+        <div id='pair-no-guilds' class='alert alert-warning small p-2 mb-3' style='display:none'></div>
         <div class='d-flex align-items-center gap-2'>
          <button id='pair-issue-btn' class='btn btn-success btn-sm' onclick='doIssue()' data-i18n='pair.issueBtn'></button>
          <button class='btn btn-link btn-sm text-muted' onclick='cancelPair()' data-i18n='pair.cancelBtn'></button>
@@ -133,7 +138,7 @@ namespace IzudisbotBSP
 <script>
 const $=id=>document.getElementById(id);
 let inited=false;
-let lastServerToken=null;   // 서버측 토큰 추적 — 페어링/저장으로 바뀌면 입력칸 갱신
+let lastServerToken=null;
 const LANGS=['en','ko','ja'];
 const LANGNAME={en:'English',ko:'한국어',ja:'日本語'};
 let lang=localStorage.getItem('lang')||'en';
@@ -163,7 +168,13 @@ const S={
   'pair.issueBtn':'Issue token','pair.cancelBtn':'Cancel',
   'pair.loadingGuilds':'Loading channels...','pair.noGuilds':'No eligible servers found.',
   'pair.issuing':'Issuing...',
-  'pair.errNameRequired':'Token name required','pair.errNoChannels':'Pick at least one channel'
+  'pair.errNameRequired':'Token name required','pair.errNoChannels':'Pick at least one channel',
+  'pair.noGuildsTitle':'No servers with the bot available',
+  'pair.inviteHint':'You manage these servers, but the bot is not in them. Invite it:',
+  'pair.noManageableHint':'You do not manage any Discord server. Create one (or get the Manage Server permission), then click Recheck.',
+  'pair.inviteToBtn':'Invite to',
+  'pair.inviteGeneralBtn':'Invite (pick during OAuth)',
+  'pair.recheckBtn':'Recheck'
  },
  ko:{
   'conn.connected':'연결됨','conn.disconnected':'끊김','conn.noresp':'웹 응답 없음',
@@ -188,7 +199,13 @@ const S={
   'pair.issueBtn':'토큰 발급','pair.cancelBtn':'취소',
   'pair.loadingGuilds':'채널 목록 불러오는 중...','pair.noGuilds':'사용 가능한 서버가 없습니다.',
   'pair.issuing':'발급 중...',
-  'pair.errNameRequired':'토큰 이름이 필요합니다','pair.errNoChannels':'채널을 1개 이상 선택하세요'
+  'pair.errNameRequired':'토큰 이름이 필요합니다','pair.errNoChannels':'채널을 1개 이상 선택하세요',
+  'pair.noGuildsTitle':'봇이 들어가 있는 서버가 없습니다',
+  'pair.inviteHint':'아래 서버는 관리 권한이 있지만 봇이 없습니다. 초대하세요:',
+  'pair.noManageableHint':'관리 권한이 있는 Discord 서버가 없습니다. 서버를 만들거나 서버 관리 권한을 받은 뒤 [다시 확인]을 눌러주세요.',
+  'pair.inviteToBtn':'초대',
+  'pair.inviteGeneralBtn':'봇 초대 (OAuth 화면에서 서버 선택)',
+  'pair.recheckBtn':'다시 확인'
  },
  ja:{
   'conn.connected':'接続済み','conn.disconnected':'切断','conn.noresp':'応答なし',
@@ -213,7 +230,13 @@ const S={
   'pair.issueBtn':'トークン発行','pair.cancelBtn':'キャンセル',
   'pair.loadingGuilds':'チャンネル一覧読込中...','pair.noGuilds':'利用可能なサーバーがありません。',
   'pair.issuing':'発行中...',
-  'pair.errNameRequired':'トークン名が必要です','pair.errNoChannels':'チャンネルを 1 つ以上選択してください'
+  'pair.errNameRequired':'トークン名が必要です','pair.errNoChannels':'チャンネルを 1 つ以上選択してください',
+  'pair.noGuildsTitle':'ボットが入っているサーバーがありません',
+  'pair.inviteHint':'管理権限のあるサーバーですがボットがいません。招待してください:',
+  'pair.noManageableHint':'管理権限のある Discord サーバーがありません。サーバーを作成するか管理権限を取得してから [再確認] を押してください。',
+  'pair.inviteToBtn':'招待',
+  'pair.inviteGeneralBtn':'ボットを招待 (OAuth で選択)',
+  'pair.recheckBtn':'再確認'
  }
 };
 function t(k){return (S[lang]&&S[lang][k])||S.en[k]||k;}
@@ -225,11 +248,19 @@ function toggleTok(){const x=$('token');x.type=x.type==='password'?'text':'passw
 function applyI18n(){
  document.querySelectorAll('[data-i18n]').forEach(e=>{e.textContent=t(e.dataset.i18n);});
  document.documentElement.lang=lang;
- const next=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];
- $('langbtn').textContent=LANGNAME[next];
+ $('langbtn').textContent='🌐 '+lang.toUpperCase();
+ renderLangMenu();
  poll();
 }
-function toggleLang(){lang=LANGS[(LANGS.indexOf(lang)+1)%LANGS.length];localStorage.setItem('lang',lang);applyI18n();}
+function renderLangMenu(){
+ const m=$('langmenu'); if(!m) return;
+ m.innerHTML=LANGS.map(L=>{
+  const sel=(L===lang)?' active':'';
+  const mark=(L===lang)?'✓ ':'';
+  return `<li><button type='button' class='dropdown-item${sel}' onclick='setLang(&#39;${L}&#39;)'>${mark}${esc(LANGNAME[L])}</button></li>`;
+ }).join('');
+}
+function setLang(L){ if(LANGS.indexOf(L)<0) return; lang=L; localStorage.setItem('lang',lang); applyI18n(); }
 
 async function poll(){
  try{
@@ -249,7 +280,6 @@ function render(s){
   $('launch').checked=!!s.openWebOnLaunch;
   inited=true;
  } else if(s.token!==lastServerToken && document.activeElement!==$('token')){
-  // 페어링/저장으로 서버 토큰이 바뀌었고 사용자가 입력 중이 아니면 입력칸 갱신
   $('token').value=s.token||'';
  }
  lastServerToken=s.token;
@@ -309,12 +339,7 @@ async function clearLog(){
  poll();
 }
 
-// ---- 페어링 (모드 → 봇 → 모드) ----
-// 흐름:
-//  1) startPair() → 봇이 code + sessionId 발급 (pending)
-//  2) pollPair() 가 1.5s 마다 GET → status 가 authenticated 되면 loadGuilds()
-//  3) loadGuilds() 가 봇에서 사용자가 발급 가능한 길드+채널 받아와 picker 렌더
-//  4) 사용자가 채널 선택 + 이름 입력 + doIssue() → POST /issue → raw 토큰 받아 자동 저장
+// ---- 페어링 ----
 let pairBotBase=null;
 let pairPolling=null;
 let pairSessionId=null;
@@ -359,7 +384,6 @@ function pollPair(sessionId, expiresAt){
     showIssuePanel();
     loadGuilds(sessionId);
    }else if(j.status==='issued'){
-    // 정상적으로는 위에서 doIssue() 가 직접 받지만 race 대비
     stopPolling();
     await sendTokenToMod(j.rawToken, j.wsUrl);
    }else if(j.status==='expired'){
@@ -379,6 +403,7 @@ function showIssuePanel(){
  $('pair-status').style.display='none';
  $('pair-issue').style.display='block';
  $('pair-guilds').textContent=t('pair.loadingGuilds');
+ $('pair-no-guilds').style.display='none';
 }
 
 async function loadGuilds(sessionId){
@@ -386,26 +411,49 @@ async function loadGuilds(sessionId){
   const r=await botFetch('/api/bsp-bridge/pair/'+encodeURIComponent(sessionId)+'/guilds',{method:'POST'});
   const j=await r.json();
   if(!r.ok) throw new Error(j.error||('http '+r.status));
-  renderGuilds(j.guilds||[]);
+  renderGuilds(j);
  }catch(e){
   $('pair-guilds').textContent=t('pair.failed')+': '+(e.message||e);
+  $('pair-no-guilds').style.display='none';
  }
 }
 
-function renderGuilds(guilds){
- if(!guilds.length){
-  $('pair-guilds').textContent=t('pair.noGuilds'); return;
+function renderGuilds(payload){
+ const guilds=(payload&&payload.guilds)||[];
+ const without=(payload&&payload.manageableWithoutBot)||[];
+ const generalInvite=(payload&&payload.inviteUrl)||null;
+ const noBox=$('pair-no-guilds');
+ const gBox=$('pair-guilds');
+ if(guilds.length){
+  noBox.style.display='none';
+  const html=guilds.map(g=>
+   `<div class='mb-2'><div class='fw-semibold small text-secondary'>${esc(g.name)}</div>`+
+   `<div class='d-flex flex-wrap gap-1 mt-1'>`+
+    (g.channels||[]).map(c=>{
+     const key=g.id+':'+c.id;
+     return `<label class='btn btn-sm btn-outline-secondary'><input type='checkbox' class='form-check-input me-1 pair-ch' value='${esc(key)}'>#${esc(c.name)}</label>`;
+    }).join('')+
+   `</div></div>`
+  ).join('');
+  gBox.innerHTML=html;
+  return;
  }
- const html=guilds.map(g=>
-  `<div class='mb-2'><div class='fw-semibold small text-secondary'>${esc(g.name)}</div>`+
-  `<div class='d-flex flex-wrap gap-1 mt-1'>`+
-   (g.channels||[]).map(c=>{
-    const key=g.id+':'+c.id;
-    return `<label class='btn btn-sm btn-outline-secondary'><input type='checkbox' class='form-check-input me-1 pair-ch' value='${esc(key)}'>#${esc(c.name)}</label>`;
-   }).join('')+
-  `</div></div>`
- ).join('');
- $('pair-guilds').innerHTML=html;
+ gBox.innerHTML='';
+ let html=`<div class='mb-2 fw-semibold'>${esc(t('pair.noGuildsTitle'))}</div>`;
+ if(without.length){
+  html+=`<div class='mb-2 small'>${esc(t('pair.inviteHint'))}</div>`;
+  html+=`<div class='d-flex flex-wrap gap-1 mb-2'>`+without.map(g=>
+   `<a class='btn btn-sm btn-outline-light' target='_blank' rel='noopener' href='${esc(g.inviteUrl)}'>${esc(t('pair.inviteToBtn'))}: ${esc(g.name)}</a>`
+  ).join('')+`</div>`;
+ } else {
+  html+=`<div class='mb-2 small'>${esc(t('pair.noManageableHint'))}</div>`;
+ }
+ if(generalInvite){
+  html+=`<a class='btn btn-sm btn-primary me-2' target='_blank' rel='noopener' href='${esc(generalInvite)}'>${esc(t('pair.inviteGeneralBtn'))}</a>`;
+ }
+ html+=`<button type='button' class='btn btn-sm btn-outline-secondary' onclick='loadGuilds(pairSessionId)'>${esc(t('pair.recheckBtn'))}</button>`;
+ noBox.innerHTML=html;
+ noBox.style.display='block';
 }
 
 async function doIssue(){
@@ -446,13 +494,14 @@ function cancelPair(){
  pairSessionId=null;
  $('pair-issue').style.display='none';
  $('pair-status').style.display='none';
- poll();   // 배너(토큰 미설정 시) 즉시 복구
+ $('pair-no-guilds').style.display='none';
+ poll();
 }
 
 applyI18n();
 setInterval(poll,1500);
 </script>
 </body>
-</html>";
+</html>"";
     }
 }
