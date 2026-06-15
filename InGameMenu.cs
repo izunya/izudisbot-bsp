@@ -24,6 +24,13 @@ namespace IzudisbotBSP
         private static WebServer _web;
         private static IPALogger _log;
 
+        /// <summary>
+        /// 메인 메뉴 씬이 준비됐는지(= MenuButtons 접근 성공). 버튼 등록에 성공하면 true.
+        /// VoiceIndicator 가 FloatingScreen 을 너무 일찍 만들어 NRE/좀비 레이캐스터를
+        /// 남기지 않도록 생성 타이밍 게이트로 쓴다.
+        /// </summary>
+        internal static volatile bool MenuReady;
+
         public static void Register(WebServer webServer, IPALogger log)
         {
             _web = webServer;
@@ -60,6 +67,7 @@ namespace IzudisbotBSP
 #else
                 MenuButtons.Instance.RegisterButton(_button);   // BSML 1.12.x (ZenjectSingleton)
 #endif
+                MenuReady = true;   // 메뉴 준비 완료 → VoiceIndicator 가 안전하게 FloatingScreen 생성 가능
                 _log?.Info("In-game menu button registered.");
                 return true;
             }
@@ -109,6 +117,7 @@ namespace IzudisbotBSP
 
             _button = null;
             _helperGo = null;
+            MenuReady = false;
         }
     }
 

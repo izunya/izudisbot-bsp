@@ -52,6 +52,11 @@ namespace IzudisbotBSP
         private bool _wasFollowing;            // 직전 프레임에 패널을 따라가고 있었는지
         private bool _placedDefault;           // 기본 위치에 한 번이라도 놓았는지
 
+        // FloatingScreen 생성 재시도 제어 (NRE 시 매 프레임 누수 방지)
+        private float _nextCreateAttempt;      // Time.unscaledTime 기준 다음 시도 시각
+        private int _createAttempts;
+        private const int MaxCreateAttempts = 30;
+
         // 패널과 우리 화면 사이 추가 여백(월드 단위).
         private const float FollowWorldGap = 0.02f;
 
@@ -116,6 +121,12 @@ namespace IzudisbotBSP
                     _hasValue = true;
                 }
             }
+
+            // 음성 카운트가 한 번이라도 와야 화면을 만들고 추적한다.
+            // (게임 초기 로딩 씬에서는 FloatingScreen 인프라가 아직 준비되지 않아
+            //  CreateFloatingScreen 이 NRE 를 내며 부분 생성된 캔버스가 매 프레임
+            //  누적 → VR 포인터 클릭을 가로막는다. 0.3.0 의 생성 타이밍을 복원.)
+            if (!_hasValue) return;
 
             EnsureCreated();
             if (_screen == null) return;
@@ -287,10 +298,23 @@ namespace IzudisbotBSP
         private void EnsureCreated()
         {
             if (_screen != null) return;
+            // 메뉴 씬이 준비되기 전엔 BSML FloatingScreen 인프라가 없어 CreateFloatingScreen 이
+            // NRE 를 내며, 부분 생성된 FloatingScreen 의 망가진 VRGraphicRaycaster 가 남아
+            // EventSystem.RaycastAll 을 매 프레임 터뜨려 모든 버튼 클릭을 막는다. → 준비 후에만 생성.
+            if (!InGameMenu.MenuReady) return;
+            if (_createAttempts >= MaxCreateAttempts) return;       // 영구 실패 시 포기 (스팸/누수 방지)
+            if (Time.unscaledTime < _nextCreateAttempt) return;     // 시도 간격 최소 1초
+            _nextCreateAttempt = Time.unscaledTime + 1f;
+            _createAttempts++;
             try
             {
                 _screen = FloatingScreen.CreateFloatingScreen(ScreenSize, false, ScreenPos, ScreenRot);
                 DontDestroyOnLoad(_screen.gameObject);
+
+                // 인디케이터는 표시 전용 — 입력에 절대 참여하지 않게 한다.
+                // (레이캐스터를 남겨두면 우리 화면의 VRGraphicRaycaster 가 깨질 경우
+                //  EventSystem.RaycastAll 전체가 죽어 모든 버튼이 클릭 불가가 됨.)
+                MakeNonInteractive(_screen.gameObject);
 
                 // 반투명 배경
                 var bg = _screen.gameObject.GetComponentInChildren<Image>();
@@ -311,9 +335,30 @@ namespace IzudisbotBSP
             }
             catch (Exception err)
             {
-                Plugin.Log?.Warn("VoiceIndicator create 실패: " + err.Message);
+                // 부분 생성된 FloatingScreen 이 남아 클릭을 가로막지 않도록 정리.
+                Plugin.Log?.Warn("VoiceIndicator create 실패(" + _createAttempts + "/" + MaxCreateAttempts + "): " + err);
+                try { if (_screen != null) Destroy(_screen.gameObject); } catch { }
                 _screen = null;
                 _text = null;
+            }
+        }
+
+        /// <summary>FloatingScreen 을 입력 비참여로 만든다 — 레이캐스터 제거 + CanvasGroup 차단.</summary>
+        private static void MakeNonInteractive(GameObject root)
+        {
+            try
+            {
+                // GraphicRaycaster / VRGraphicRaycaster 모두 BaseRaycaster 파생 → 한 번에 제거.
+                foreach (var rc in root.GetComponentsInChildren<UnityEngine.EventSystems.BaseRaycaster>(true))
+                    Destroy(rc);
+
+                var cg = root.GetComponent<CanvasGroup>() ?? root.AddComponent<CanvasGroup>();
+                cg.interactable = false;
+                cg.blocksRaycasts = false;
+            }
+            catch (Exception err)
+            {
+                Plugin.Log?.Warn("VoiceIndicator: 입력 비참여 설정 실패: " + err.Message);
             }
         }
 
