@@ -35,7 +35,7 @@ namespace IzudisbotBSP
         public bool OpenWebOnLaunch { get; set; } = true;
 
         /// <summary>봇 대시보드 / 페어링 API 의 베이스 URL. 모드 웹 UI 가 직접 호출함.</summary>
-        public string BotApiBase { get; set; } = "https://izunya.dev";
+        public string BotApiBase { get; set; } = "https://izudisbot.izunya.dev";
 
         // ---- 필터 ----
 
