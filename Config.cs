@@ -34,6 +34,9 @@ namespace IzudisbotBSP
         /// <summary>비트세이버 실행 시 웹 UI 를 기본 브라우저로 자동으로 열지 여부</summary>
         public bool OpenWebOnLaunch { get; set; } = true;
 
+        /// <summary>봇 대시보드 / 페어링 API 의 베이스 URL. 모드 웹 UI 가 직접 호출함.</summary>
+        public string BotApiBase { get; set; } = "https://izunya.dev";
+
         // ---- 필터 ----
 
         /// <summary>게임으로 전달하지 않을(음소거) 채널 ID 목록</summary>
