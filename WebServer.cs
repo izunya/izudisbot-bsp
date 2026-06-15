@@ -148,6 +148,14 @@ namespace IzudisbotBSP
                     WriteJson(res, BuildState());
                     return;
                 }
+                if (method == "POST" && path == "/api/pair-receive")
+                {
+                    // 모드 웹 UI 가 봇 페어링 API 에서 받은 raw 토큰을 여기로 전달.
+                    // 이 라우트는 localhost 전용이라 origin 검증 없음 (HttpListener 가 이미 localhost 만 바인딩).
+                    HandlePairReceive(ReadBody(req));
+                    WriteJson(res, BuildState());
+                    return;
+                }
 
                 res.StatusCode = 404;
                 WriteText(res, "not found");
@@ -171,6 +179,7 @@ namespace IzudisbotBSP
                 forwardOnlyCommands = _config.ForwardOnlyCommands,
                 openWebOnLaunch = _config.OpenWebOnLaunch,
                 port = Port,
+                botApiBase = _config.BotApiBase,
                 lastMessageUtc = _service.LastMessageUtc?.ToString("o"),
                 channels = _service.GetChannels(),
                 log = _service.GetRecentLog(120)
@@ -187,8 +196,28 @@ namespace IzudisbotBSP
             if (j["reconnectIntervalSec"] != null) _config.ReconnectIntervalSec = Math.Max(1, j["reconnectIntervalSec"].ToObject<int>());
             if (j["forwardOnlyCommands"] != null) _config.ForwardOnlyCommands = j["forwardOnlyCommands"].ToObject<bool>();
             if (j["openWebOnLaunch"] != null) _config.OpenWebOnLaunch = j["openWebOnLaunch"].ToObject<bool>();
+            if (j["botApiBase"] != null) _config.BotApiBase = (j["botApiBase"].ToString() ?? "").Trim();
 
             _service.SaveAndReconnect();
+        }
+
+        private void HandlePairReceive(string body)
+        {
+            try
+            {
+                var j = JObject.Parse(body);
+                var token = j["token"]?.ToString();
+                var wsUrl = j["wsUrl"]?.ToString();
+                if (string.IsNullOrEmpty(token)) return;
+                _config.Token = token.Trim();
+                if (!string.IsNullOrEmpty(wsUrl)) _config.Url = wsUrl.Trim();
+                _service.SaveAndReconnect();
+                _log?.Info("Paired token received via /api/pair-receive");
+            }
+            catch (Exception err)
+            {
+                _log?.Warn("pair-receive failed: " + err.Message);
+            }
         }
 
         private void HandleChannel(string body)

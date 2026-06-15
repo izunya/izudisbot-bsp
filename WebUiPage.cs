@@ -39,6 +39,20 @@ namespace IzudisbotBSP
     <div class='card'>
      <div class='card-header' data-i18n='card.connection'></div>
      <div class='card-body'>
+      <div class='alert alert-info py-2 mb-3' id='pair-banner' style='display:none'>
+       <div class='d-flex justify-content-between align-items-center'>
+        <span data-i18n='pair.bannerHint'></span>
+        <button class='btn btn-sm btn-light' onclick='startPair()' data-i18n='pair.startBtn'></button>
+       </div>
+      </div>
+      <div class='alert alert-success py-2 mb-3' id='pair-status' style='display:none'>
+       <div data-i18n='pair.codeLabel' class='small'></div>
+       <div class='d-flex justify-content-between align-items-center mt-1'>
+        <code id='pair-code' class='fs-4'></code>
+        <a id='pair-link' target='_blank' rel='noopener' class='btn btn-sm btn-primary' data-i18n='pair.openBtn'></a>
+       </div>
+       <div class='small mt-2 text-muted' id='pair-msg'></div>
+      </div>
       <div class='mb-3'>
        <label class='form-label' data-i18n='label.token'></label>
        <div class='input-group'>
@@ -117,7 +131,14 @@ const S={
   'status.ws':'WebSocket','status.token':'Token','status.tokenSet':'set','status.tokenNone':'not set',
   'status.last':'Last message','btn.reconnect':'Reconnect now','time.now':'just now','time.sec':'s ago','time.min':'m ago','time.hour':'h ago',
   'ch.toggle':'forward on/off','ch.none':'No channels received yet','log.sub':'(newest first · filtered are dimmed)',
-  'btn.clear':'Clear','log.filtered':'(filtered)','log.none':'No log'
+  'btn.clear':'Clear','log.filtered':'(filtered)','log.none':'No log',
+  'pair.bannerHint':'No token yet?','pair.startBtn':'Get from bot',
+  'pair.codeLabel':'Enter this 6-digit code on the bot dashboard',
+  'pair.openBtn':'Open dashboard',
+  'pair.waiting':'Waiting for you to redeem the code on the dashboard...',
+  'pair.received':'✓ Token received. Saving...',
+  'pair.expired':'Timed out (90 s). Try again.',
+  'pair.failed':'Pairing failed'
  },
  ko:{
   'conn.connected':'연결됨','conn.disconnected':'끊김','conn.noresp':'웹 응답 없음',
@@ -128,7 +149,14 @@ const S={
   'status.ws':'WebSocket','status.token':'토큰','status.tokenSet':'설정됨','status.tokenNone':'없음',
   'status.last':'마지막 수신','btn.reconnect':'지금 재접속','time.now':'방금','time.sec':'초 전','time.min':'분 전','time.hour':'시간 전',
   'ch.toggle':'게임 전달 on/off','ch.none':'아직 수신된 채널이 없습니다','log.sub':'(신규순 · 필터된 메시지는 흐리게)',
-  'btn.clear':'지우기','log.filtered':'(필터됨)','log.none':'로그 없음'
+  'btn.clear':'지우기','log.filtered':'(필터됨)','log.none':'로그 없음',
+  'pair.bannerHint':'아직 토큰이 없으신가요?','pair.startBtn':'봇에서 가져오기',
+  'pair.codeLabel':'봇 대시보드에서 이 6자리 코드를 입력하세요',
+  'pair.openBtn':'대시보드 열기',
+  'pair.waiting':'대시보드에서 코드를 입력하기를 기다리는 중...',
+  'pair.received':'✓ 토큰을 받았습니다. 저장 중...',
+  'pair.expired':'시간 초과 (90초). 다시 시도해주세요.',
+  'pair.failed':'페어링 실패'
  },
  ja:{
   'conn.connected':'接続済み','conn.disconnected':'切断','conn.noresp':'応答なし',
@@ -139,7 +167,14 @@ const S={
   'status.ws':'WebSocket','status.token':'トークン','status.tokenSet':'設定済み','status.tokenNone':'未設定',
   'status.last':'最終受信','btn.reconnect':'今すぐ再接続','time.now':'たった今','time.sec':'秒前','time.min':'分前','time.hour':'時間前',
   'ch.toggle':'転送 on/off','ch.none':'受信したチャンネルがありません','log.sub':'(新しい順・フィルタ済みは薄く)',
-  'btn.clear':'クリア','log.filtered':'(フィルタ済み)','log.none':'ログなし'
+  'btn.clear':'クリア','log.filtered':'(フィルタ済み)','log.none':'ログなし',
+  'pair.bannerHint':'まだトークンがありませんか?','pair.startBtn':'ボットから取得',
+  'pair.codeLabel':'ボットダッシュボードでこの 6 桁コードを入力してください',
+  'pair.openBtn':'ダッシュボードを開く',
+  'pair.waiting':'ダッシュボードでコード入力を待っています...',
+  'pair.received':'✓ トークンを受信しました。保存中...',
+  'pair.expired':'タイムアウト (90 秒)。もう一度お試しください。',
+  'pair.failed':'ペアリング失敗'
  }
 };
 function t(k){return (S[lang]&&S[lang][k])||S.en[k]||k;}
@@ -174,6 +209,10 @@ function render(s){
   $('cmdonly').checked=!!s.forwardOnlyCommands;
   $('launch').checked=!!s.openWebOnLaunch;
   inited=true;
+ }
+ pairBotBase=s.botApiBase||pairBotBase;
+ if($('pair-status').style.display!=='block'){
+  $('pair-banner').style.display=s.tokenSet?'none':'block';
  }
  const c=$('conn');
  c.className='badge '+(s.connected?'text-bg-success':'text-bg-danger');
@@ -220,6 +259,52 @@ async function toggle(id,en){
 async function clearLog(){
  await fetch('/api/clearlog',{method:'POST'});
  poll();
+}
+
+// ---- 페어링 (모드 → 봇 → 모드) ----
+let pairBotBase=null;
+let pairPolling=null;
+
+async function startPair(){
+ if(!pairBotBase){ $('pair-msg').textContent=t('pair.failed')+': botApiBase'; return; }
+ try{
+  const r=await fetch(pairBotBase.replace(/\/$/,'')+'/api/bsp-bridge/pair/start',{method:'POST'});
+  const j=await r.json();
+  if(!r.ok||!j.sessionId) throw new Error(j.error||('http '+r.status));
+  $('pair-code').textContent=j.code;
+  $('pair-link').href=j.claimUrl;
+  $('pair-banner').style.display='none';
+  $('pair-status').style.display='block';
+  $('pair-msg').textContent=t('pair.waiting');
+  pollPair(j.sessionId, j.expiresAt);
+ }catch(e){
+  $('pair-status').style.display='block';
+  $('pair-msg').textContent=t('pair.failed')+': '+(e.message||e);
+ }
+}
+
+function pollPair(sessionId, expiresAt){
+ if(pairPolling) clearInterval(pairPolling);
+ pairPolling=setInterval(async()=>{
+  if(Date.now()>expiresAt){
+   clearInterval(pairPolling); pairPolling=null;
+   $('pair-msg').textContent=t('pair.expired');
+   return;
+  }
+  try{
+   const r=await fetch(pairBotBase.replace(/\/$/,'')+'/api/bsp-bridge/pair/'+encodeURIComponent(sessionId));
+   const j=await r.json();
+   if(j.status==='claimed'){
+    clearInterval(pairPolling); pairPolling=null;
+    $('pair-msg').textContent=t('pair.received');
+    await fetch('/api/pair-receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:j.rawToken,wsUrl:j.wsUrl})});
+    setTimeout(()=>{ $('pair-status').style.display='none'; poll(); }, 1500);
+   }else if(j.status==='expired'){
+    clearInterval(pairPolling); pairPolling=null;
+    $('pair-msg').textContent=t('pair.expired');
+   }
+  }catch{}
+ }, 1500);
 }
 
 applyI18n();
