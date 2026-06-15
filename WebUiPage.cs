@@ -133,6 +133,7 @@ namespace IzudisbotBSP
 <script>
 const $=id=>document.getElementById(id);
 let inited=false;
+let lastServerToken=null;   // 서버측 토큰 추적 — 페어링/저장으로 바뀌면 입력칸 갱신
 const LANGS=['en','ko','ja'];
 const LANGNAME={en:'English',ko:'한국어',ja:'日本語'};
 let lang=localStorage.getItem('lang')||'en';
@@ -217,7 +218,7 @@ const S={
 };
 function t(k){return (S[lang]&&S[lang][k])||S.en[k]||k;}
 
-function esc(s){return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 function ago(iso){const d=(Date.now()-new Date(iso).getTime())/1000;if(d<5)return t('time.now');if(d<60)return Math.floor(d)+t('time.sec');if(d<3600)return Math.floor(d/60)+t('time.min');return Math.floor(d/3600)+t('time.hour');}
 function toggleTok(){const x=$('token');x.type=x.type==='password'?'text':'password';}
 
@@ -247,7 +248,11 @@ function render(s){
   $('cmdonly').checked=!!s.forwardOnlyCommands;
   $('launch').checked=!!s.openWebOnLaunch;
   inited=true;
+ } else if(s.token!==lastServerToken && document.activeElement!==$('token')){
+  // 페어링/저장으로 서버 토큰이 바뀌었고 사용자가 입력 중이 아니면 입력칸 갱신
+  $('token').value=s.token||'';
  }
+ lastServerToken=s.token;
  pairBotBase=s.botApiBase||pairBotBase;
  const issueOpen=$('pair-issue').style.display==='block';
  const statusOpen=$('pair-status').style.display==='block';
@@ -441,6 +446,7 @@ function cancelPair(){
  pairSessionId=null;
  $('pair-issue').style.display='none';
  $('pair-status').style.display='none';
+ poll();   // 배너(토큰 미설정 시) 즉시 복구
 }
 
 applyI18n();
