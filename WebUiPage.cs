@@ -502,6 +502,6 @@ applyI18n();
 setInterval(poll,1500);
 </script>
 </body>
-</html>"";
+</html>";
     }
 }
