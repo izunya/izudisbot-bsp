@@ -46,6 +46,20 @@ namespace IzudisbotBSP
         private bool _connected;
         private Timer _reconnectTimer;
 
+        // ---- 재접속 실패 추적 (무한 재접속 방지) ----
+        // 접속 직후 곧바로(MinHealthySeconds 이내) 끊기거나 아예 못 열면 1회 "실패"로 센다.
+        // 연속 MaxConsecutiveFailures 회 실패하거나, 서버가 4xxx(앱 정의) close 코드로 끊으면
+        // → 토큰 무효/디스코드 미연동으로 보고 재접속을 멈추고 사용자에게 안내한다.
+        private int _consecutiveFailures;
+        private DateTime _lastOpenUtc;
+        private volatile bool _gaveUp;
+        // 의도적 종료(재접속/Stop)로 소켓을 닫을 땐 OnClose 를 실패로 세지 않도록 억제.
+        // websocket-sharp Close() 는 동기라 OnClose 가 Close() 안에서 발생 → 플래그로 구분 가능.
+        private volatile bool _suppressClose;
+        private string _statusReason = "";
+        private const int MaxConsecutiveFailures = 5;
+        private const int MinHealthySeconds = 15;
+
         // ---- 웹 UI 용 상태/로그/채널 통계 ----
         private readonly object _logLock = new object();
         private readonly LinkedList<LogEntry> _recentLog = new LinkedList<LogEntry>();
@@ -119,7 +133,22 @@ namespace IzudisbotBSP
         public void Start()
         {
             _running = true;
+            ResetFailureState();
             Connect();
+        }
+
+        /// <summary>재접속 실패 카운터/포기 상태 초기화 (시작·수동 재접속 시).</summary>
+        private void ResetFailureState()
+        {
+            _consecutiveFailures = 0;
+            _lastOpenUtc = default(DateTime);
+            _gaveUp = false;
+            SetStatus("");
+        }
+
+        private void SetStatus(string reason)
+        {
+            lock (_lock) { _statusReason = reason ?? ""; }
         }
 
         public void Stop()
@@ -139,6 +168,12 @@ namespace IzudisbotBSP
         public bool Connected => _connected;
         public string CurrentUrl => _config.Url;
         public bool TokenSet => !string.IsNullOrEmpty(_config.Token);
+
+        /// <summary>연속 실패/인증거부로 자동 재접속을 포기한 상태인지 (웹 UI 표시용).</summary>
+        public bool GaveUp => _gaveUp;
+
+        /// <summary>마지막 상태 사유 메시지 (연결 끊김/포기 안내, 웹 UI 표시용).</summary>
+        public string StatusReason { get { lock (_lock) { return _statusReason; } } }
 
         public DateTime? LastMessageUtc
         {
@@ -194,6 +229,7 @@ namespace IzudisbotBSP
             Config.Save();
             _log?.Info("Config updated via local web → reconnecting: " + _config.Url);
             DisposeSocket();
+            ResetFailureState();   // 사용자가 설정을 바꿨으니 포기 상태 해제하고 새로 시도
             Connect();
         }
 
@@ -245,6 +281,7 @@ namespace IzudisbotBSP
 
             // 재시작 없이 새 Url/Token 으로 즉시 재접속
             DisposeSocket();
+            ResetFailureState();
             Connect();
         }
 
@@ -298,12 +335,15 @@ namespace IzudisbotBSP
             try
             {
                 DisposeSocket();
+                _suppressClose = false;   // 새 소켓의 OnClose 는 실패로 집계해야 함
                 // 토큰을 Cookie 헤더로 전송 (URL query 대신 — Cloudflare access log 노출 회피)
                 _ws = new WebSocket(_config.Url);
                 _ws.SetCookie(new WebSocketSharp.Net.Cookie("bsp_token", _config.Token));
                 _ws.OnOpen += (s, e) =>
                 {
                     _connected = true;
+                    _lastOpenUtc = DateTime.UtcNow;
+                    SetStatus("connected");
                     _log?.Info("Connected: " + _config.Url);
                     m_OnSystemMessageCallbacks?.InvokeAll((IChatService)this, "Discord: connected");
                     m_OnLoginCallbacks?.InvokeAll((IChatService)this);
@@ -313,12 +353,17 @@ namespace IzudisbotBSP
                 _ws.OnClose += (s, e) =>
                 {
                     _connected = false;
+                    if (_suppressClose)   // 의도적 종료 → 조용히 닫기만, 실패 집계/재접속 안 함
+                    {
+                        _log?.Info("Closed (intentional): code=" + e.Code);
+                        return;
+                    }
                     _log?.Info("Closed: code=" + e.Code + " reason=" + e.Reason);
                     m_OnSystemMessageCallbacks?.InvokeAll(
                         (IChatService)this,
                         "Discord: disconnected (" + e.Code + ")"
                     );
-                    ScheduleReconnect();
+                    HandleDisconnect(e.Code, e.Reason);
                 };
                 _ws.ConnectAsync();
             }
@@ -329,11 +374,48 @@ namespace IzudisbotBSP
             }
         }
 
+        /// <summary>
+        /// 연결이 끊겼을 때 호출 — 실패를 집계하고, 한계를 넘으면 재접속을 포기한다.
+        /// </summary>
+        private void HandleDisconnect(ushort code, string reason)
+        {
+            // 4000~4999 = 애플리케이션 정의 close 코드. 서버(#1)가 인증 실패/토큰 거부 등
+            // "재접속해도 소용없는" 영구 거부를 알릴 때 이 범위를 쓰기로 약속한다. → 즉시 포기.
+            bool fatal = code >= 4000 && code <= 4999;
+
+            // 접속을 충분히 오래(MinHealthySeconds 이상) 유지했었다면 정상 운영 중 끊김으로 보고
+            // 카운터를 리셋. 그렇지 않으면(곧바로 끊김 / 아예 못 열림) 실패로 누적.
+            var held = _lastOpenUtc == default(DateTime)
+                ? 0.0
+                : (DateTime.UtcNow - _lastOpenUtc).TotalSeconds;
+            if (_lastOpenUtc != default(DateTime) && held >= MinHealthySeconds)
+                _consecutiveFailures = 0;
+            else
+                _consecutiveFailures++;
+
+            if (fatal || _consecutiveFailures >= MaxConsecutiveFailures)
+            {
+                _gaveUp = true;
+                var msg = fatal
+                    ? "Discord: 봇 서버가 연결을 거부했습니다 (code " + code + "). 토큰이 무효/만료됐거나 디스코드 연동이 해제됐을 수 있어요. 웹 UI 에서 다시 페어링하세요."
+                    : "Discord: 연결에 " + _consecutiveFailures + "회 연속 실패했습니다. 토큰/디스코드 연동을 확인하세요. 자동 재접속을 멈춥니다 (웹 UI 에서 저장하면 다시 시도).";
+                SetStatus(msg);
+                _log?.Warn("Auto-reconnect 중단: code=" + code + " fails=" + _consecutiveFailures + " fatal=" + fatal);
+                m_OnSystemMessageCallbacks?.InvokeAll((IChatService)this, msg);
+                return;   // 재접속 스케줄하지 않음
+            }
+
+            SetStatus("disconnected (code " + code + "), 재접속 시도 중…");
+            ScheduleReconnect();
+        }
+
         private void ScheduleReconnect()
         {
-            if (!_running || !_config.AutoReconnect) return;
+            if (!_running || !_config.AutoReconnect || _gaveUp) return;
             _reconnectTimer?.Dispose();
-            var interval = Math.Max(1, _config.ReconnectIntervalSec) * 1000;
+            // 연속 실패가 쌓이면 간격을 늘려 서버를 덜 두드린다 (1×~6× 백오프).
+            var baseMs = Math.Max(1, _config.ReconnectIntervalSec) * 1000;
+            var interval = baseMs * Math.Min(_consecutiveFailures + 1, 6);
             _reconnectTimer = new Timer(_ =>
             {
                 try { Connect(); } catch { }
@@ -342,6 +424,7 @@ namespace IzudisbotBSP
 
         private void DisposeSocket()
         {
+            _suppressClose = true;   // 지금부터의 OnClose 는 의도적 종료 → 집계/재접속 금지
             try { _ws?.Close(); } catch { }
             _ws = null;
             _connected = false;

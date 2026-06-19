@@ -171,6 +171,9 @@ namespace IzudisbotBSP
             return new
             {
                 connected = _service.Connected,
+                gaveUp = _service.GaveUp,
+                statusReason = _service.StatusReason,
+                chatModuleEnabled = BspChatGate.ChatEnabled,
                 url = _config.Url,
                 token = _config.Token,
                 tokenSet = _service.TokenSet,

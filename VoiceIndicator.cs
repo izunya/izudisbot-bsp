@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using BeatSaberMarkupLanguage;
 using BeatSaberMarkupLanguage.FloatingScreen;
 using CP_SDK.UI.Components;
 using TMPro;
@@ -302,9 +303,28 @@ namespace IzudisbotBSP
             // NRE 를 내며, 부분 생성된 FloatingScreen 의 망가진 VRGraphicRaycaster 가 남아
             // EventSystem.RaycastAll 을 매 프레임 터뜨려 모든 버튼 클릭을 막는다. → 준비 후에만 생성.
             if (!InGameMenu.MenuReady) return;
-            if (_createAttempts >= MaxCreateAttempts) return;       // 영구 실패 시 포기 (스팸/누수 방지)
             if (Time.unscaledTime < _nextCreateAttempt) return;     // 시도 간격 최소 1초
             _nextCreateAttempt = Time.unscaledTime + 1f;
+
+            // ── 좀비 레이캐스터 차단 (메뉴 버튼 클릭 막힘 원인) ──────────────────
+            // CreateFloatingScreen 은 내부에서 BeatSaberUI.PhysicsRaycasterWithCache 에
+            // 접근하는데, VR 포인터/PhysicsRaycaster 가 아직 없으면 Enumerable.First 가
+            // "Sequence contains no elements" 로 던진다. 그 예외가 CreateFloatingScreen
+            // *도중* 터지면 BSML 이 이미 만든 FloatingScreen(+망가진 VRGraphicRaycaster)이
+            // 우리 _screen 에 안 담긴 채 씬에 좀비로 남아 EventSystem.RaycastAll 을 매
+            // 프레임 터뜨려 모든 버튼 클릭을 막는다(catch 에서 _screen 이 null 이라 정리 불가).
+            // → 먼저 캐시를 워밍해서, 준비됐을 때만 실제 생성을 호출한다.
+            //   준비 전이면 조용히 대기(시도 횟수 소모 안 함 → 나중에 준비돼도 인디케이터 표시 가능).
+            try
+            {
+                if (BeatSaberUI.PhysicsRaycasterWithCache == null) return;
+            }
+            catch
+            {
+                return;   // 아직 미준비 → 다음 주기 재시도(좀비 생성하지 않음)
+            }
+
+            if (_createAttempts >= MaxCreateAttempts) return;       // 준비 후에도 계속 실패하면 포기 (스팸 방지)
             _createAttempts++;
             try
             {

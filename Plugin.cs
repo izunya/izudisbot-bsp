@@ -32,12 +32,9 @@ namespace IzudisbotBSP
             Config.Load();
             _service = new DiscordChatService(Config.Current, Log);
             CP_SDK.Chat.Service.RegisterExternalService(_service);
-            _service.Start();
             Log.Info("DiscordChatService registered → " + (Config.Current.Url ?? "(unconfigured)"));
 
-            // 음성채널 인원수 floating UI — 메인 스레드에서 GameObject 생성해야 함.
-            VoiceIndicator.Init();
-
+            // 로컬 웹 UI / 설정 메뉴는 BSP Chat 상태와 무관하게 항상 띄운다 (설정·페어링용).
             _webServer = new WebServer(_service, Config.Current, Log);
             _webServer.Start();
 
@@ -45,11 +42,30 @@ namespace IzudisbotBSP
                 _webServer.OpenInBrowser();
 
             InGameMenu.Register(_webServer, Log);
+
+            // 디스코드 브리지(WS) + 음성 인디케이터는 BeatSaberPlus_Chat 이 켜져 있을 때만 동작.
+            // BSP Chat 이 꺼지면 함께 멈추고, 다시 켜지면 재개한다. (현재 상태를 즉시 반영)
+            BspChatGate.Init(StartBridge, StopBridge, Log);
+        }
+
+        /// <summary>BSP Chat 활성 → 디스코드 브리지 + 음성 인디케이터 시작 (메인 스레드).</summary>
+        private void StartBridge()
+        {
+            _service?.Start();
+            VoiceIndicator.Init();   // 메인 스레드에서 GameObject 생성해야 함
+        }
+
+        /// <summary>BSP Chat 비활성 → 브리지 + 음성 인디케이터 정지 (메인 스레드).</summary>
+        private void StopBridge()
+        {
+            _service?.Stop();
+            try { VoiceIndicator.Shutdown(); } catch { /* 종료/씬 전환 중 무시 */ }
         }
 
         [OnDisable]
         public void OnDisable()
         {
+            BspChatGate.Shutdown();
             InGameMenu.Unregister(Log);
             _webServer?.Stop();
             _webServer = null;
