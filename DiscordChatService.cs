@@ -397,7 +397,7 @@ namespace IzudisbotBSP
             {
                 _gaveUp = true;
                 var msg = fatal
-                    ? "Discord: 봇 서버가 연결을 거부했습니다 (code " + code + "). 토큰이 무효/만료됐거나 디스코드 연동이 해제됐을 수 있어요. 웹 UI 에서 다시 페어링하세요."
+                    ? FatalCloseMessage(code)
                     : "Discord: 연결에 " + _consecutiveFailures + "회 연속 실패했습니다. 토큰/디스코드 연동을 확인하세요. 자동 재접속을 멈춥니다 (웹 UI 에서 저장하면 다시 시도).";
                 SetStatus(msg);
                 _log?.Warn("Auto-reconnect 중단: code=" + code + " fails=" + _consecutiveFailures + " fatal=" + fatal);
@@ -407,6 +407,27 @@ namespace IzudisbotBSP
 
             SetStatus("disconnected (code " + code + "), 재접속 시도 중…");
             ScheduleReconnect();
+        }
+
+        /// <summary>
+        /// 봇 서버가 보내는 4xxx(앱 정의) close 코드별 안내 메시지.
+        ///   4000 bad URL       — WS 주소가 잘못됨(설정 문제)
+        ///   4001 unauthorized  — 토큰이 거부됨(무효/잘못된 토큰)  ← 핵심: 즉시 포기
+        ///   4002 token revoked — 대시보드에서 토큰이 해지됨
+        /// </summary>
+        private static string FatalCloseMessage(ushort code)
+        {
+            switch (code)
+            {
+                case 4000:
+                    return "Discord: 서버 주소(URL)가 잘못됐습니다 (code 4000). 웹 UI 에서 URL 설정을 확인하세요.";
+                case 4001:
+                    return "Discord: 토큰이 거부됐습니다 (code 4001). 토큰이 무효하거나 잘못됐어요. 웹 UI 에서 다시 페어링하세요.";
+                case 4002:
+                    return "Discord: 토큰이 해지됐습니다 (code 4002). 대시보드에서 토큰을 revoke 했어요. 웹 UI 에서 새 토큰으로 다시 페어링하세요.";
+                default:
+                    return "Discord: 봇 서버가 연결을 거부했습니다 (code " + code + "). 토큰이 무효/만료됐거나 디스코드 연동이 해제됐을 수 있어요. 웹 UI 에서 다시 페어링하세요.";
+            }
         }
 
         private void ScheduleReconnect()
