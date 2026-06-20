@@ -413,6 +413,7 @@ namespace IzudisbotBSP
                     _lastOpenUtc = DateTime.UtcNow;
                     SetStatus("connected");
                     _log?.Info("Connected: " + _config.Url);
+                    SendHello();   // 봇이 모드/BS/관련 플러그인 버전 알 수 있도록 자기 소개
                     m_OnSystemMessageCallbacks?.InvokeAll((IChatService)this, "Discord: connected");
                     m_OnLoginCallbacks?.InvokeAll((IChatService)this);
                 };
@@ -906,6 +907,44 @@ namespace IzudisbotBSP
             };
             try { _ws.Send(obj.ToString(Formatting.None)); }
             catch (Exception err) { _log?.Warn("bsp_command send 실패: " + err.Message); }
+        }
+
+        // ================================================================
+        // hello — ws 접속 직후 봇에 모드/게임/관련 플러그인 버전을 알린다.
+        // 봇은 이 정보로 대시보드에 표시하거나 호환성 진단에 사용.
+        // ================================================================
+
+        /// <summary>관련 BSIPA 플러그인의 버전을 조회 (없으면 null). hello payload 용.</summary>
+        private static readonly string[] TrackedPlugins = new[]
+        {
+            "BeatSaberPlus_Chat",
+            "BeatSaberPlus_ChatRequest",
+            "BeatSaberPlus_ChatEmoteRain",
+            "BeatSaberPlus_ChatIntegrations",
+            "wipbot",
+        };
+
+        private void SendHello()
+        {
+            if (_ws == null || !_connected) return;
+            try
+            {
+                var plugins = new JObject();
+                foreach (var id in TrackedPlugins)
+                {
+                    var p = IPA.Loader.PluginManager.GetPluginFromId(id);
+                    plugins[id] = p?.Version?.ToString();   // 없으면 null
+                }
+                var obj = new JObject
+                {
+                    ["type"] = "hello",
+                    ["modVersion"] = Plugin.Self?.Version?.ToString() ?? "unknown",
+                    ["bsVersion"] = UnityEngine.Application.version,
+                    ["plugins"] = plugins,
+                };
+                _ws.Send(obj.ToString(Formatting.None));
+            }
+            catch (Exception err) { _log?.Warn("hello send 실패: " + err.Message); }
         }
 
         // ================================================================
