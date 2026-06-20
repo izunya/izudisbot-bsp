@@ -81,6 +81,32 @@ namespace IzudisbotBSP
             public DateTime ExpiresUtc;
         }
 
+        // ---- 일반 명령 트래커 (!oops/!queue/!link/!block/!unblock/!wip 등) ----
+        // BSP_ChatRequest / wipbot 등 IChatService 를 듣는 모든 플러그인이 응답하면
+        // 그 응답을 봇으로 forward 해서 디스코드에 표시한다.
+        // 응답은 1초 디바운스로 모아 multi-line (!queue 등) 도 한 번에 송신.
+        private static readonly Regex CommandRegex = new Regex(@"^!(\w{1,16})(?:\s+(.+))?$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly HashSet<string> TrackedCommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "oops", "wrong", "queue", "link", "np", "nowplaying",
+            "skip", "remove", "unblock", "block", "who",
+            "wip",   // wipbot
+        };
+        private readonly Dictionary<string, PendingCommand> _pendingCommands =
+            new Dictionary<string, PendingCommand>(StringComparer.OrdinalIgnoreCase);
+
+        private class PendingCommand
+        {
+            public string Command;
+            public string Args;
+            public string ChannelId;
+            public string UserName;
+            public DateTime ExpiresUtc;
+            public List<string> Responses;
+            public Timer FlushTimer;
+        }
+
         public DiscordChatService(Config config, IPALogger log)
         {
             _config = config;
@@ -301,9 +327,11 @@ namespace IzudisbotBSP
 
         public void SendTextMessage(IChatChannel channel, string message)
         {
-            // BSP_ChatRequest 등 다른 모듈이 응답을 우리 service 의 채널로 보내면 여기로 들어옴.
-            // 직전 !bsr 명령에 대한 응답인지 매칭 → 봇에 bsr_request 이벤트 전달.
+            // BSP_ChatRequest / wipbot 등 다른 모듈이 응답을 우리 service 의 채널로 보내면 여기로 들어옴.
+            // 1) !bsr 매칭 → bsr_request 이벤트 (기존)
+            // 2) 일반 명령 (!oops/!link/!queue/!wip 등) 매칭 → bsp_command 이벤트 (디바운스 후 송신)
             TryMatchBsrResponse(message);
+            TryMatchCommandResponse(message);
         }
 
         // ================================================================
@@ -515,6 +543,19 @@ namespace IzudisbotBSP
                 {
                     TrackPendingBsr(user.UserName, bsrMatch.Groups[1].Value, chId);
                 }
+                else
+                {
+                    // !bsr 외의 명령 — !oops/!link/!queue/!wip 등 화이트리스트 매칭 시 추적
+                    var cmdMatch = CommandRegex.Match(content);
+                    if (cmdMatch.Success)
+                    {
+                        var cmd = cmdMatch.Groups[1].Value.ToLowerInvariant();
+                        if (TrackedCommands.Contains(cmd))
+                        {
+                            TrackPendingCommand(user.UserName, cmd, cmdMatch.Groups[2].Value, chId);
+                        }
+                    }
+                }
 
                 var emotes = ParseEmotes(obj["emotes"] as JArray);
                 var message = new DiscordChatMessage(
@@ -633,7 +674,18 @@ namespace IzudisbotBSP
                         _pendingBsr.Remove(key);
                     }
                 }
-                hasRemaining = _pendingBsr.Count > 0;
+                // 응답 없이 만료된 일반 명령은 그냥 폐기 (알림 없음 — !oops 가 무응답이면
+                // BSP_ChatRequest 가 모듈 비활성이거나 큐에 신청이 없는 경우).
+                foreach (var key in _pendingCommands.Keys.ToList())
+                {
+                    var c = _pendingCommands[key];
+                    if (c.ExpiresUtc <= now)
+                    {
+                        try { c.FlushTimer?.Dispose(); } catch { }
+                        _pendingCommands.Remove(key);
+                    }
+                }
+                hasRemaining = _pendingBsr.Count > 0 || _pendingCommands.Count > 0;
                 _pendingGcTimer?.Dispose();
                 _pendingGcTimer = null;
                 if (hasRemaining) EnsurePendingGcTimer();
@@ -724,6 +776,96 @@ namespace IzudisbotBSP
             if (!string.IsNullOrEmpty(reason)) obj["reason"] = reason;
             try { _ws.Send(obj.ToString(Formatting.None)); }
             catch (Exception err) { _log?.Warn("bsr_request send 실패: " + err.Message); }
+        }
+
+        // ================================================================
+        // 일반 명령 (!oops/!queue/!link/!block/!unblock/!wip 등) — 응답을 1초 디바운스로
+        // 모은 뒤 bsp_command 이벤트로 봇에 송신.
+        // ================================================================
+
+        private void TrackPendingCommand(string userName, string command, string args, string channelId)
+        {
+            if (string.IsNullOrEmpty(userName)) return;
+            lock (_pendingLock)
+            {
+                // 같은 사용자가 새 명령을 치면 이전 pending 폐기 (응답 매칭 충돌 방지)
+                if (_pendingCommands.TryGetValue(userName, out var prev))
+                {
+                    try { prev.FlushTimer?.Dispose(); } catch { }
+                }
+                _pendingCommands[userName] = new PendingCommand
+                {
+                    Command = command,
+                    Args = args ?? "",
+                    ChannelId = channelId,
+                    UserName = userName,
+                    ExpiresUtc = DateTime.UtcNow.AddSeconds(8),
+                    Responses = new List<string>(),
+                };
+                EnsurePendingGcTimer();
+            }
+        }
+
+        /// <summary>
+        /// BSP_ChatRequest / wipbot 응답이 들어오면 매칭되는 pending 명령에 누적.
+        /// 첫 응답 시 1초 디바운스 타이머 시작 → multi-line (!queue 등) 도 합쳐서 한 번에 송신.
+        /// </summary>
+        private void TryMatchCommandResponse(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            lock (_pendingLock)
+            {
+                PendingCommand matched = null;
+                foreach (var kv in _pendingCommands)
+                {
+                    var name = kv.Value.UserName;
+                    if (!string.IsNullOrEmpty(name) && message.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        matched = kv.Value;
+                        break;
+                    }
+                }
+                if (matched == null) return;
+                matched.Responses.Add(message);
+                if (matched.FlushTimer == null)
+                {
+                    var key = matched.UserName;
+                    matched.FlushTimer = new Timer(_ => FlushPendingCommand(key), null, 1000, Timeout.Infinite);
+                }
+            }
+        }
+
+        private void FlushPendingCommand(string userName)
+        {
+            PendingCommand fire = null;
+            lock (_pendingLock)
+            {
+                if (_pendingCommands.TryGetValue(userName, out var p))
+                {
+                    fire = p;
+                    _pendingCommands.Remove(userName);
+                    try { p.FlushTimer?.Dispose(); } catch { }
+                }
+            }
+            if (fire != null) SendCommandEvent(fire);
+        }
+
+        private void SendCommandEvent(PendingCommand p)
+        {
+            if (_ws == null || !_connected) return;
+            var resp = new JArray();
+            foreach (var line in p.Responses) resp.Add(line);
+            var obj = new JObject
+            {
+                ["type"] = "bsp_command",
+                ["command"] = p.Command,
+                ["args"] = p.Args,
+                ["channelId"] = p.ChannelId,
+                ["requestedBy"] = new JObject { ["name"] = p.UserName },
+                ["responses"] = resp,
+            };
+            try { _ws.Send(obj.ToString(Formatting.None)); }
+            catch (Exception err) { _log?.Warn("bsp_command send 실패: " + err.Message); }
         }
 
         // ================================================================
