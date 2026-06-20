@@ -371,11 +371,14 @@ async function startPair(){
 // 'Open dashboard' 클릭 — window.open() 으로 띄워야 봇 대시보드가 승인 완료 후
 // 스스로 창을 닫을 수 있다 (브라우저는 JS 가 연 창만 self-close 허용).
 // 일반 click 만 가로채고 middle/ctrl-click 은 href 그대로 (브라우저 기본 동작).
+// noopener 는 일부러 안 줌 — noopener 창은 auxiliary 가 아니라서 히스토리가 1개일
+// 때만 window.close() 가 먹는다. 로그인 리다이렉트로 히스토리가 늘면 자동 닫기가
+// 실패하므로, auxiliary 창으로 열어 항상 닫히게 한다. 대시보드는 본인 신뢰 도메인.
 function openPairDashboard(ev){
  if(ev && (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey)) return true;
  if(ev) ev.preventDefault();
  const url=$('pair-link').href;
- if(url) window.open(url, '_blank', 'noopener');
+ if(url) window.open(url, '_blank');
  return false;
 }
 
