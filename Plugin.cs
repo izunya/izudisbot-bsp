@@ -1,4 +1,5 @@
 using IPA;
+using IPA.Loader;
 using IPALogger = IPA.Logging.Logger;
 
 namespace IzudisbotBSP
@@ -16,14 +17,17 @@ namespace IzudisbotBSP
     public class Plugin
     {
         public static IPALogger Log { get; private set; }
+        /// <summary>이 플러그인의 BSIPA metadata (버전 / id) — hello payload 등에 사용.</summary>
+        public static PluginMetadata Self { get; private set; }
         private DiscordChatService _service;
         private WebServer _webServer;
 
         [Init]
-        public Plugin(IPALogger logger)
+        public Plugin(IPALogger logger, PluginMetadata metadata)
         {
             Log = logger;
-            Log.Info("izudisbot-bsp loaded");
+            Self = metadata;
+            Log.Info("izudisbot-bsp v" + (metadata?.Version?.ToString() ?? "?") + " loaded");
         }
 
         [OnEnable]
