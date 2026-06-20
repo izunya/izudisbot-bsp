@@ -53,7 +53,7 @@ namespace IzudisbotBSP
        <div data-i18n='pair.codeLabel' class='small'></div>
        <div class='d-flex justify-content-between align-items-center mt-1'>
         <code id='pair-code' class='fs-4'></code>
-        <a id='pair-link' target='_blank' rel='noopener' class='btn btn-sm btn-primary' data-i18n='pair.openBtn'></a>
+        <a id='pair-link' target='_blank' rel='noopener' class='btn btn-sm btn-primary' data-i18n='pair.openBtn' onclick='return openPairDashboard(event)'></a>
        </div>
        <div class='small mt-2 text-muted' id='pair-msg'></div>
       </div>
@@ -366,6 +366,17 @@ async function startPair(){
   $('pair-status').style.display='block';
   $('pair-msg').textContent=t('pair.failed')+': '+(e.message||e);
  }
+}
+
+// 'Open dashboard' 클릭 — window.open() 으로 띄워야 봇 대시보드가 승인 완료 후
+// 스스로 창을 닫을 수 있다 (브라우저는 JS 가 연 창만 self-close 허용).
+// 일반 click 만 가로채고 middle/ctrl-click 은 href 그대로 (브라우저 기본 동작).
+function openPairDashboard(ev){
+ if(ev && (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey)) return true;
+ if(ev) ev.preventDefault();
+ const url=$('pair-link').href;
+ if(url) window.open(url, '_blank', 'noopener');
+ return false;
 }
 
 function pollPair(sessionId, expiresAt){
