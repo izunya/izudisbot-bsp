@@ -27,6 +27,7 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 - **Responses shown in-game** — `!bsr` and the commands above don't just reply on Discord; their results are also drawn on the in-game BSP Chat overlay so the player sees them live
 - Auto-reconnects if the connection drops
 - **Local web UI** (English/Korean toggle) to configure everything live — no restart
+- **Update notice** — shows a banner in the web UI when a newer release is available on GitHub
 - **In-game button** in the left Mods tab to open the web UI
 - Optionally **opens the web UI in your browser every time Beat Saber launches**
 
@@ -118,6 +119,7 @@ Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and up
 - **응답을 게임 안에도 표시** — `!bsr` 및 위 명령들의 결과를 디스코드뿐 아니라 게임 안 BSP Chat 오버레이에도 띄워 플레이어가 바로 확인
 - 연결이 끊기면 자동 재접속
 - **로컬 웹 UI**(영어/한국어 전환)로 모든 설정을 재시작 없이 실시간 변경
+- **업데이트 알림** — GitHub에 새 릴리스가 있으면 웹 UI에 배너로 안내
 - 메인 메뉴 좌측 **Mods 탭의 인게임 버튼**으로 웹 UI 열기
 - 옵션으로 **비트세이버 실행 때마다 웹 UI 자동 열기**
 
@@ -209,6 +211,7 @@ dotnet build -c Release /p:CopyToPlugins=true
 - **応答をゲーム内にも表示** — `!bsr` および上記コマンドの結果を Discord だけでなくゲーム内 BSP Chat オーバーレイにも表示し、プレイヤーがその場で確認
 - 切断時は自動再接続
 - **ローカル Web UI**（英語/韓国語/日本語 切替）で再起動なしに設定をリアルタイム変更
+- **アップデート通知** — GitHub に新しいリリースがあると Web UI にバナーで通知
 - メインメニュー左の **Mods タブのボタン**から Web UI を開く
 - 任意で **Beat Saber 起動時に Web UI を自動で開く**
 
