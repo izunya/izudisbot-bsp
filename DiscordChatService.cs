@@ -70,6 +70,10 @@ namespace IzudisbotBSP
         // ---- !bsr → 디스코드 알림 추적 ----
         private static readonly Regex BsrRegex = new Regex(@"^!bsr\s+([0-9a-fA-F]{1,8})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private readonly object _pendingLock = new object();
+
+        // 게임 안 BSP_Chat 오버레이에 모듈 응답(!bsr/!queue/!oops 등의 결과)을 띄울 때 쓰는
+        // 합성 발신자. ChatRequest/wipbot 응답을 플레이어가 게임 화면에서 직접 보도록 대리 표시한다.
+        private static readonly DiscordChatUser BotUser = new DiscordChatUser("izudisbot-bot", "izudisbot", "#5865F2");
         private readonly Dictionary<string, PendingBsr> _pendingBsr = new Dictionary<string, PendingBsr>(StringComparer.OrdinalIgnoreCase);
         private Timer _pendingGcTimer;
 
@@ -332,6 +336,42 @@ namespace IzudisbotBSP
             // 2) 일반 명령 (!oops/!link/!queue/!wip 등) 매칭 → bsp_command 이벤트 (디바운스 후 송신)
             TryMatchBsrResponse(message);
             TryMatchCommandResponse(message);
+            // 3) 게임 안 BSP_Chat 오버레이에도 응답을 띄워 VR 플레이어가 직접 보게 한다.
+            EchoToOverlay(channel, message);
+        }
+
+        /// <summary>
+        /// 모듈이 SendTextMessage 로 보낸 응답을 게임 안 BSP_Chat 오버레이에 표시한다.
+        /// 오버레이는 수신(OnTextMessageReceived) 메시지만 그리므로, 응답을 합성 봇 발신자로
+        /// 되울려(InvokeAll) 띄운다. 구독자(BSP_Chat/ChatRequest)에게만 가고 우리 HandleMessage
+        /// 로는 안 돌아오므로 루프 없음. 응답 텍스트는 '!' 로 시작하지 않아 명령 재실행도 없음.
+        /// </summary>
+        private void EchoToOverlay(IChatChannel channel, string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            try
+            {
+                var ch = channel ?? AnyChannel();
+                if (ch == null) return;
+                var msg = new DiscordChatMessage(
+                    id: Guid.NewGuid().ToString(),
+                    text: message,
+                    sender: BotUser,
+                    channel: ch
+                );
+                m_OnTextMessageReceivedCallbacks?.InvokeAll(this, msg);
+            }
+            catch (Exception err) { _log?.Warn("in-game echo 실패: " + err.Message); }
+        }
+
+        /// <summary>발신 채널이 안 주어졌을 때 쓸 임의의 알려진 채널 (없으면 null).</summary>
+        private DiscordChatChannel AnyChannel()
+        {
+            lock (_lock)
+            {
+                foreach (var c in _channels.Values) return c;
+            }
+            return null;
         }
 
         // ================================================================

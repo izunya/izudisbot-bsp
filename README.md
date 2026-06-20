@@ -24,6 +24,7 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 - **Discord voice-channel member count** (a Discord-colored ● + count) that **docks right above BeatSaberPlus's viewer-count panel** and follows the chat window when you move it — falls back to the chat panel's bottom-right when the viewer count is hidden, or a standalone panel if Chat isn't running
 - **`!bsr` request feedback** — sends the request result (queued / rejected / queue closed) back to the bot so Discord users get a reply
 - **Other commands relayed too** — results of `!oops`/`!queue`/`!link`/`!np`/`!skip`/`!who`/`!wip` etc. (BeatSaberPlus ChatRequest & wipbot) are forwarded back to Discord
+- **Responses shown in-game** — `!bsr` and the commands above don't just reply on Discord; their results are also drawn on the in-game BSP Chat overlay so the player sees them live
 - Auto-reconnects if the connection drops
 - **Local web UI** (English/Korean toggle) to configure everything live — no restart
 - **In-game button** in the left Mods tab to open the web UI
@@ -114,6 +115,7 @@ Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and up
 - **디스코드 음성채널 인원수**(디스코드 색 ● + 숫자)를 **BeatSaberPlus 시청자 수 패널 바로 위**에 붙여 표시하고 채팅창을 옮기면 같이 따라감 — 시청자 수 표시가 꺼져 있으면 채팅 패널 오른쪽 아래로, Chat 모듈이 없으면 독립 패널로 폴백
 - **`!bsr` 신청 결과 피드백** — 신청 결과(큐 추가 / 거절 / 큐 닫힘)를 봇으로 다시 보내 디스코드 사용자가 응답을 받음
 - **다른 명령도 전달** — `!oops`/`!queue`/`!link`/`!np`/`!skip`/`!who`/`!wip` 등(BeatSaberPlus ChatRequest·wipbot)의 결과도 디스코드로 다시 전달
+- **응답을 게임 안에도 표시** — `!bsr` 및 위 명령들의 결과를 디스코드뿐 아니라 게임 안 BSP Chat 오버레이에도 띄워 플레이어가 바로 확인
 - 연결이 끊기면 자동 재접속
 - **로컬 웹 UI**(영어/한국어 전환)로 모든 설정을 재시작 없이 실시간 변경
 - 메인 메뉴 좌측 **Mods 탭의 인게임 버튼**으로 웹 UI 열기
@@ -204,6 +206,7 @@ dotnet build -c Release /p:CopyToPlugins=true
 - **Discord ボイスチャンネルの人数**（Discord カラーの ● + 数字）を **BeatSaberPlus の視聴者数パネルのすぐ上**に表示し、チャット欄を動かすと一緒に追従 — 視聴者数表示がオフのときはチャットパネルの右下、Chat モジュールが無いときは独立パネルにフォールバック
 - **`!bsr` リクエスト結果のフィードバック** — リクエスト結果（キュー追加 / 拒否 / キュー閉鎖）をボットへ返信し、Discord ユーザーに応答が届く
 - **他のコマンドも転送** — `!oops`/`!queue`/`!link`/`!np`/`!skip`/`!who`/`!wip` など（BeatSaberPlus ChatRequest・wipbot）の結果も Discord へ返信
+- **応答をゲーム内にも表示** — `!bsr` および上記コマンドの結果を Discord だけでなくゲーム内 BSP Chat オーバーレイにも表示し、プレイヤーがその場で確認
 - 切断時は自動再接続
 - **ローカル Web UI**（英語/韓国語/日本語 切替）で再起動なしに設定をリアルタイム変更
 - メインメニュー左の **Mods タブのボタン**から Web UI を開く
