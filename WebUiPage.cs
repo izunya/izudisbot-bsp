@@ -37,6 +37,12 @@ namespace IzudisbotBSP
  </nav>
 
  <div class='container mt-4'>
+  <div id='update-banner' class='alert alert-warning py-2 mb-3' style='display:none'>
+   <div class='d-flex justify-content-between align-items-center'>
+    <span><span data-i18n='update.text'></span> <strong id='update-version'></strong></span>
+    <a id='update-link' target='_blank' rel='noopener' class='btn btn-sm btn-warning' data-i18n='update.btn'></a>
+   </div>
+  </div>
   <div class='row g-4'>
 
    <div class='col-lg-6'>
@@ -155,6 +161,7 @@ const S={
   'status.last':'Last message','btn.reconnect':'Reconnect now','time.now':'just now','time.sec':'s ago','time.min':'m ago','time.hour':'h ago',
   'ch.toggle':'forward on/off','ch.none':'No channels received yet','log.sub':'(newest first · filtered are dimmed)',
   'btn.clear':'Clear','log.filtered':'(filtered)','log.none':'No log',
+  'update.text':'A new mod version is available:','update.btn':'Open release',
   'pair.bannerHint':'No token yet?','pair.startBtn':'Get from bot',
   'pair.codeLabel':'Enter this 6-digit code on the bot dashboard, then approve',
   'pair.openBtn':'Open dashboard',
@@ -186,6 +193,7 @@ const S={
   'status.last':'마지막 수신','btn.reconnect':'지금 재접속','time.now':'방금','time.sec':'초 전','time.min':'분 전','time.hour':'시간 전',
   'ch.toggle':'게임 전달 on/off','ch.none':'아직 수신된 채널이 없습니다','log.sub':'(신규순 · 필터된 메시지는 흐리게)',
   'btn.clear':'지우기','log.filtered':'(필터됨)','log.none':'로그 없음',
+  'update.text':'새 모드 버전이 있습니다:','update.btn':'릴리스 열기',
   'pair.bannerHint':'아직 토큰이 없으신가요?','pair.startBtn':'봇에서 가져오기',
   'pair.codeLabel':'봇 대시보드에서 이 6자리 코드를 입력하고 승인하세요',
   'pair.openBtn':'대시보드 열기',
@@ -217,6 +225,7 @@ const S={
   'status.last':'最終受信','btn.reconnect':'今すぐ再接続','time.now':'たった今','time.sec':'秒前','time.min':'分前','time.hour':'時間前',
   'ch.toggle':'転送 on/off','ch.none':'受信したチャンネルがありません','log.sub':'(新しい順・フィルタ済みは薄く)',
   'btn.clear':'クリア','log.filtered':'(フィルタ済み)','log.none':'ログなし',
+  'update.text':'新しい MOD バージョンがあります:','update.btn':'リリースを開く',
   'pair.bannerHint':'まだトークンがありませんか?','pair.startBtn':'ボットから取得',
   'pair.codeLabel':'ボットダッシュボードでこの 6 桁コードを入力して承認してください',
   'pair.openBtn':'ダッシュボードを開く',
@@ -284,6 +293,15 @@ function render(s){
  }
  lastServerToken=s.token;
  pairBotBase=s.botApiBase||pairBotBase;
+ // 새 버전 알림 배너 — 최신 tag 받았고 자기 버전보다 크면 표시
+ const ub=$('update-banner');
+ if(s.updateAvailable && s.latestVersion){
+  $('update-version').textContent=s.latestVersion;
+  $('update-link').href=s.latestUrl||'https://github.com/izunya/izudisbot-bsp/releases';
+  ub.style.display='block';
+ } else {
+  ub.style.display='none';
+ }
  const issueOpen=$('pair-issue').style.display==='block';
  const statusOpen=$('pair-status').style.display==='block';
  if(!issueOpen && !statusOpen){

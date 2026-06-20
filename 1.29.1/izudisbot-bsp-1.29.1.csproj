@@ -43,6 +43,7 @@
         <Compile Include="..\SettingsFlowCoordinator.cs" Link="SettingsFlowCoordinator.cs" />
         <Compile Include="..\SettingsViewController.cs" Link="SettingsViewController.cs" />
         <Compile Include="..\VoiceIndicator.cs" Link="VoiceIndicator.cs" />
+        <Compile Include="..\UpdateChecker.cs" Link="UpdateChecker.cs" />
     </ItemGroup>
 
     <!-- 임베디드 리소스: 공유 BSML + 이 폴더의 1.29.1 manifest -->

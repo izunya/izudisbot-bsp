@@ -50,6 +50,9 @@ namespace IzudisbotBSP
             // 디스코드 브리지(WS) + 음성 인디케이터는 BeatSaberPlus_Chat 이 켜져 있을 때만 동작.
             // BSP Chat 이 꺼지면 함께 멈추고, 다시 켜지면 재개한다. (현재 상태를 즉시 반영)
             BspChatGate.Init(StartBridge, StopBridge, Log);
+
+            // GitHub Releases 폴링 — 24h 마다 새 모드 버전 체크 (웹 UI 배너로 안내)
+            UpdateChecker.Start(Log);
         }
 
         /// <summary>BSP Chat 활성 → 디스코드 브리지 + 음성 인디케이터 시작 (메인 스레드).</summary>
@@ -69,6 +72,7 @@ namespace IzudisbotBSP
         [OnDisable]
         public void OnDisable()
         {
+            UpdateChecker.Stop();
             BspChatGate.Shutdown();
             InGameMenu.Unregister(Log);
             _webServer?.Stop();
