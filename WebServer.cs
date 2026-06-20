@@ -183,6 +183,10 @@ namespace IzudisbotBSP
                 openWebOnLaunch = _config.OpenWebOnLaunch,
                 port = Port,
                 botApiBase = _config.BotApiBase,
+                modVersion = Plugin.Self?.Version?.ToString(),
+                latestVersion = UpdateChecker.LatestTag,
+                latestUrl = UpdateChecker.LatestUrl,
+                updateAvailable = UpdateChecker.UpdateAvailable,
                 lastMessageUtc = _service.LastMessageUtc?.ToString("o"),
                 channels = _service.GetChannels(),
                 log = _service.GetRecentLog(120)
