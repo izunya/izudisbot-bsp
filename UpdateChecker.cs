@@ -44,7 +44,7 @@ namespace IzudisbotBSP
                     var latestStr = LatestTag.TrimStart('v', 'V');
                     try
                     {
-                        var latest = SemVer.Version.Parse(latestStr);
+                        var latest = new SemVer.Version(latestStr);
                         return latest > Plugin.Self.Version;
                     }
                     catch { return false; }

@@ -81,6 +81,13 @@
         </Reference>
         <Reference Include="System" />
         <Reference Include="System.Core" />
+        <!-- UpdateChecker 의 HttpClient (GitHub Releases 조회) -->
+        <Reference Include="System.Net.Http" />
+        <!-- PluginMetadata.Version / 업데이트 비교용 SemVer.Version (BSIPA 제공) -->
+        <Reference Include="SemVer">
+            <HintPath>$(BeatSaberDir)\Libs\SemVer.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
     </ItemGroup>
 
     <!-- 1.29.1 빌드는 별도 프로젝트(1.29.1\izudisbot-bsp-1.29.1.csproj). 메인 글롭에서 제외 -->

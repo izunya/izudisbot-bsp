@@ -128,6 +128,13 @@
         </Reference>
         <Reference Include="System" />
         <Reference Include="System.Core" />
+        <!-- UpdateChecker 의 HttpClient (GitHub Releases 조회) -->
+        <Reference Include="System.Net.Http" />
+        <!-- PluginMetadata.Version / 업데이트 비교용 SemVer.Version (BSIPA 제공) -->
+        <Reference Include="SemVer">
+            <HintPath>$(BeatSaberDir)\Libs\SemVer.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
     </ItemGroup>
 
     <!-- 빌드 후 1.29.1 Plugins 로 복사 (dotnet build /p:CopyToPlugins=true) -->
