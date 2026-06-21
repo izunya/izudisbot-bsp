@@ -34,7 +34,7 @@ A BSIPA plugin that forwards **Discord channel messages into the in-game BeatSab
 ### Requirements
 | Need | Notes |
 |---|---|
-| **Beat Saber 1.40.8** | Built against this version |
+| **Beat Saber 1.44.0 / 1.40.8 / 1.29.1** | Per-version zips are distributed |
 | **BSIPA 4.3.0+** | Mod loader |
 | **BeatSaberPlus** | `Chat` (required); `ChatRequest` for song requests |
 | **izudisbot Discord bot** | **Required** — the Discord bot this bridge talks to. Set up at <https://izudisbot.izunya.dev> |
@@ -126,7 +126,7 @@ Pushing a `v*` tag (e.g. `v0.1.1`) triggers GitHub Actions to build, zip, and up
 ### 작동에 필요한 것
 | 필요 | 비고 |
 |---|---|
-| **Beat Saber 1.40.8** | 이 버전 기준 빌드 |
+| **Beat Saber 1.44.0 / 1.40.8 / 1.29.1** | 버전별 zip 배포 |
 | **BSIPA 4.3.0+** | 모드 로더 |
 | **BeatSaberPlus** | `Chat`(필수), 곡 신청은 `ChatRequest` |
 | **izudisbot 디스코드 봇** | **필수** — 이 브리지가 연결하는 디스코드 봇. <https://izudisbot.izunya.dev> 에서 설정 |
@@ -218,7 +218,7 @@ dotnet build -c Release /p:CopyToPlugins=true
 ### 必要なもの
 | 必要 | 備考 |
 |---|---|
-| **Beat Saber 1.40.8 / 1.29.1** | 各バージョン用 zip を配布 |
+| **Beat Saber 1.44.0 / 1.40.8 / 1.29.1** | 各バージョン用 zip を配布 |
 | **BSIPA 4.3.0+** | Mod ローダー |
 | **BeatSaberPlus** | `Chat`（必須）、曲リクエストは `ChatRequest` |
 | **izudisbot Discord ボット** | **必須** — このブリッジが通信する Discord ボット。<https://izudisbot.izunya.dev> で設定 |
@@ -263,7 +263,7 @@ dotnet build -c Release /p:CopyToPlugins=true
 | `!bsr` が効かない | **ChatRequest** モジュールも有効にする必要あり |
 
 ### 自分でビルド
-Windows + .NET SDK 8 + .NET Framework 4.7.2 + Beat Saber（BSIPA・BeatSaberPlus・BSML 含む）が必要。`Directory.Build.props` の `BeatSaberDir`（または環境変数）をインストール先に設定。1.29.1 ビルドは `1.29.1\izudisbot-bsp-1.29.1.csproj` を使用。
+Windows + .NET SDK 8 + .NET Framework 4.7.2 + Beat Saber（BSIPA・BeatSaberPlus・BSML 含む）が必要。`Directory.Build.props` の `BeatSaberDir`（または環境変数）をインストール先に設定。1.29.1 ビルドは `1.29.1\izudisbot-bsp-1.29.1.csproj`、1.44.0 ビルドは `1.44.0\izudisbot-bsp-1.44.0.csproj` を使用。
 ```cmd
 dotnet build -c Release
 :: ビルド後にゲームの Plugins フォルダへコピー

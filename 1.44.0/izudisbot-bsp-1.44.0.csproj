@@ -1,5 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+    <!--
+        Beat Saber 1.44.0 빌드.
+        루트(1.40.8) 프로젝트와 .cs 소스를 전부 공유(링크)한다.
+        1.44.0 의 managed/플러그인 레이아웃은 1.40.8 과 동일(modern ViewSystem, modern BSML)이라
+        1.29.1 같은 BSML_LEGACY / HMLib 분기는 필요 없다.
+        루트와의 차이는 manifest gameVersion(1.44.0)과 BeatSaberDir(Steam 설치 경로)뿐.
+    -->
+
     <PropertyGroup>
         <TargetFramework>net472</TargetFramework>
         <LangVersion>latest</LangVersion>
@@ -9,9 +17,42 @@
         <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
         <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
         <Version>0.6.0</Version>
+        <!-- 1.44.0 게임 경로 (루트 Directory.Build.props 값을 덮어씀). Steam 설치본. -->
+        <BeatSaberDir>C:\Program Files (x86)\Steam\steamapps\common\Beat Saber</BeatSaberDir>
+        <!-- 이 폴더엔 .cs 가 없고 전부 ..\ 에서 링크하므로 기본 글롭은 끔 -->
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     </PropertyGroup>
 
-    <!-- BSP / BSIPA / Unity references -->
+    <!-- 공유 소스 링크 -->
+    <ItemGroup>
+        <Compile Include="..\Plugin.cs" Link="Plugin.cs" />
+        <Compile Include="..\Config.cs" Link="Config.cs" />
+        <Compile Include="..\DiscordChatService.cs" Link="DiscordChatService.cs" />
+        <Compile Include="..\DiscordChatChannel.cs" Link="DiscordChatChannel.cs" />
+        <Compile Include="..\DiscordChatUser.cs" Link="DiscordChatUser.cs" />
+        <Compile Include="..\DiscordChatMessage.cs" Link="DiscordChatMessage.cs" />
+        <Compile Include="..\DiscordChatEmote.cs" Link="DiscordChatEmote.cs" />
+        <Compile Include="..\WebServer.cs" Link="WebServer.cs" />
+        <Compile Include="..\WebUiPage.cs" Link="WebUiPage.cs" />
+        <Compile Include="..\InGameMenu.cs" Link="InGameMenu.cs" />
+        <Compile Include="..\BspChatGate.cs" Link="BspChatGate.cs" />
+        <Compile Include="..\SettingsFlowCoordinator.cs" Link="SettingsFlowCoordinator.cs" />
+        <Compile Include="..\SettingsViewController.cs" Link="SettingsViewController.cs" />
+        <Compile Include="..\VoiceIndicator.cs" Link="VoiceIndicator.cs" />
+        <Compile Include="..\UpdateChecker.cs" Link="UpdateChecker.cs" />
+    </ItemGroup>
+
+    <!-- 임베디드 리소스: 공유 BSML + 이 폴더의 1.44.0 manifest -->
+    <ItemGroup>
+        <EmbeddedResource Include="..\UI\settings.bsml">
+            <LogicalName>IzudisbotBSP.UI.settings.bsml</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="manifest.json">
+            <LogicalName>IzudisbotBSP.manifest.json</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+    <!-- BSP / BSIPA / Unity / BSML 참조 (1.44.0 = 1.40.8 메인과 동일 경로) -->
     <ItemGroup>
         <Reference Include="ChatPlexSDK_BS">
             <HintPath>$(BeatSaberDir)\Plugins\ChatPlexSDK_BS.dll</HintPath>
@@ -90,29 +131,7 @@
         </Reference>
     </ItemGroup>
 
-    <!-- 1.29.1 / 1.44.0 빌드는 별도 프로젝트. 메인 글롭에서 제외 -->
-    <ItemGroup>
-        <Compile Remove="1.29.1\**" />
-        <EmbeddedResource Remove="1.29.1\**" />
-        <None Remove="1.29.1\**" />
-        <Compile Remove="1.44.0\**" />
-        <EmbeddedResource Remove="1.44.0\**" />
-        <None Remove="1.44.0\**" />
-    </ItemGroup>
-
-    <!-- manifest.json 은 embedded resource 로만 포함 (None default 제거) -->
-    <ItemGroup>
-        <None Remove="manifest.json" />
-        <EmbeddedResource Include="manifest.json" />
-        <None Remove="UI\settings.bsml" />
-        <EmbeddedResource Include="UI\settings.bsml" />
-    </ItemGroup>
-
-    <!--
-        빌드 후 산출물 자동 배포 (선택):
-        dotnet build /p:CopyToPlugins=true  → 자동 복사
-        기본은 OFF 라 일반 빌드는 그냥 bin\ 에만 떨어짐.
-    -->
+    <!-- 빌드 후 1.44.0 Plugins 로 복사 (dotnet build /p:CopyToPlugins=true) -->
     <Target Name="CopyToPluginsFolder" AfterTargets="Build" Condition="'$(CopyToPlugins)' == 'true'">
         <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
               DestinationFolder="$(BeatSaberDir)\Plugins"
