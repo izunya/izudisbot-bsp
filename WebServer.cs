@@ -156,6 +156,12 @@ namespace IzudisbotBSP
                     WriteJson(res, BuildState());
                     return;
                 }
+                if (method == "POST" && path == "/api/test-bridge")
+                {
+                    var sent = _service.SendBridgeTest();
+                    WriteJson(res, new { sent });
+                    return;
+                }
 
                 res.StatusCode = 404;
                 WriteText(res, "not found");
@@ -189,7 +195,15 @@ namespace IzudisbotBSP
                 updateAvailable = UpdateChecker.UpdateAvailable,
                 lastMessageUtc = _service.LastMessageUtc?.ToString("o"),
                 channels = _service.GetChannels(),
-                log = _service.GetRecentLog(120)
+                log = _service.GetRecentLog(120),
+                bridgeTest = new
+                {
+                    sentUtc = _service.LastTestSentUtc?.ToString("o"),
+                    ackUtc = _service.LastTestAckUtc?.ToString("o"),
+                    ok = _service.LastTestOk,
+                    detail = _service.LastTestDetail,
+                    channelId = _service.LastTestChannelId,
+                }
             };
         }
 
